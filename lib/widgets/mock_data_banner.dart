@@ -20,7 +20,7 @@ class MockDataBanner extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            'Preview • Mock data\n'
+            'Preview • Mock devices\n'
             'These are example devices. Your network has not been scanned.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onTertiaryContainer,

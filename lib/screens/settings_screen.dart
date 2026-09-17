@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import '../app/current_network_controller.dart';
+import 'network_information_screen.dart';
 import '../widgets/info_section.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
     required this.themeMode,
+    required this.network,
     required this.onThemeChanged,
   });
   final ThemeMode themeMode;
+  final CurrentNetworkController network;
   final ValueChanged<ThemeMode> onThemeChanged;
 
   @override
@@ -20,6 +24,22 @@ class SettingsScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.wifi_rounded),
+                title: const Text('Network Information'),
+                subtitle: const Text(
+                  'Connection details and local network access',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => NetworkInformationScreen(network: network),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             InfoSection(
               title: 'Appearance',
               children: [

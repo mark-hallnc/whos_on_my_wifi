@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'current_network_controller.dart';
 import '../repositories/device_repository.dart';
 import '../screens/home_screen.dart';
 import '../screens/saved_networks_screen.dart';
@@ -8,11 +9,13 @@ class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.repository,
+    required this.network,
     required this.themeMode,
     required this.onThemeChanged,
   });
 
   final DeviceRepository repository;
+  final CurrentNetworkController network;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
 
@@ -28,9 +31,10 @@ class _AppShellState extends State<AppShell> {
     body: IndexedStack(
       index: _selectedIndex,
       children: [
-        HomeScreen(repository: widget.repository),
+        HomeScreen(repository: widget.repository, network: widget.network),
         const SavedNetworksScreen(),
         SettingsScreen(
+          network: widget.network,
           themeMode: widget.themeMode,
           onThemeChanged: widget.onThemeChanged,
         ),

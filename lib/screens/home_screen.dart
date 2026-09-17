@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import '../app/current_network_controller.dart';
+import '../models/network_info.dart';
+import '../widgets/current_network_card.dart';
+import '../widgets/local_network_permission_flow.dart';
 import '../models/network_device.dart';
 import '../models/scan_result.dart';
 import '../repositories/device_repository.dart';
@@ -12,8 +16,13 @@ enum _DeviceFilter { all, online, known, unknown, mine, guest }
 enum _DeviceSort { name, address, lastSeen }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.repository});
+  const HomeScreen({
+    super.key,
+    required this.repository,
+    required this.network,
+  });
   final DeviceRepository repository;
+  final CurrentNetworkController network;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -24,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   _DeviceFilter _filter = _DeviceFilter.all;
   _DeviceSort _sort = _DeviceSort.name;
+  bool _scanBusy = false;
 
   @override
   void dispose() {
@@ -67,25 +77,45 @@ class _HomeScreenState extends State<HomeScreen> {
     return devices;
   }
 
-  void _showScanPreview() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.wifi_find_rounded),
-        title: const Text('Network scanning is coming'),
-        content: const Text(
-          'This preview uses mock devices so you can explore the app. '
-          'No network traffic is sent and no scan has been performed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _showScanPreview() async {
+    if (_scanBusy) return;
+    setState(() => _scanBusy = true);
+    try {
+      await widget.network.refresh();
+      if (!mounted) return;
+      final type = widget.network.info.connectionType;
+      if (type == NetworkConnectionType.wifi ||
+          type == NetworkConnectionType.ethernet) {
+        final allowed = await LocalNetworkPermissionFlow.ensureAccess(
+          context,
+          widget.network,
+        );
+        if (!mounted || !allowed) return;
+      }
+      if (!mounted) return;
+      await _showComingSoon();
+    } finally {
+      if (mounted) setState(() => _scanBusy = false);
+    }
   }
+
+  Future<void> _showComingSoon() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: const Icon(Icons.wifi_find_rounded),
+      title: const Text('Network scanning is coming'),
+      content: const Text(
+        'This preview uses mock devices so you can explore the app. '
+        'No network traffic is sent and no scan has been performed.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Got it'),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -144,14 +174,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
-                          if (result.isMock) ...[
-                            const MockDataBanner(),
-                            const SizedBox(height: 16),
-                          ],
-                          _NetworkSummary(
+                          CurrentNetworkCard(
+                            network: widget.network,
+                            scanBusy: _scanBusy,
                             result: result,
                             onScan: _showScanPreview,
                           ),
+                          if (result.isMock) ...[
+                            const SizedBox(height: 16),
+                            const MockDataBanner(),
+                          ],
                           const SizedBox(height: 24),
                           TextField(
                             controller: _searchController,
@@ -295,101 +327,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ),
   );
-}
-
-class _NetworkSummary extends StatelessWidget {
-  const _NetworkSummary({required this.result, required this.onScan});
-  final ScanResult result;
-  final VoidCallback onScan;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.primaryContainer,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(color: colors.onPrimaryContainer),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.wifi_rounded, color: colors.onPrimaryContainer),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    result.isMock
-                        ? 'CURRENT NETWORK • EXAMPLE'
-                        : 'CURRENT NETWORK',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              result.network.name ?? 'Network name unavailable',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: colors.onPrimaryContainer,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text('Local IP  ${result.network.localIpAddress ?? 'Unavailable'}'),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 32,
-              runSpacing: 12,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${result.devices.length}',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      result.isMock ? 'Example devices' : 'Discovered devices',
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Last scan',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(formatTimestamp(result.completedAt)),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onScan,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              icon: const Icon(Icons.radar_rounded),
-              label: const Text('Scan Network'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

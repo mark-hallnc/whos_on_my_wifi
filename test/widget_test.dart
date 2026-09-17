@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whos_on_my_wifi/app/wifi_app.dart';
 import 'package:whos_on_my_wifi/widgets/device_card.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('whos_on_my_wifi/network');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  setUp(
+    () => messenger.setMockMethodCallHandler(
+      channel,
+      (call) async => call.method == 'getNetworkInfo'
+          ? {'connectionType': 'none'}
+          : 'notRequired',
+    ),
+  );
+  tearDown(() => messenger.setMockMethodCallHandler(channel, null));
   testWidgets(
     'Preview supports search, details, and an honest scan placeholder',
     (tester) async {

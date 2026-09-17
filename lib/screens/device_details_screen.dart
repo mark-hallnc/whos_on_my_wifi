@@ -69,7 +69,10 @@ class DeviceDetailsScreen extends StatelessWidget {
               InfoSection(
                 title: 'Network information',
                 children: [
-                  InfoRow('Network', network.name ?? 'Unavailable'),
+                  InfoRow(
+                    isMock ? 'Network (example)' : 'Network',
+                    network.name ?? 'Unavailable',
+                  ),
                   InfoRow('IP address', device.ipAddress),
                   InfoRow('MAC address', device.macAddress ?? 'Unavailable'),
                   const Text(
