@@ -1,6 +1,15 @@
 import 'discovered_service.dart';
 
-enum DeviceType { phone, computer, television, thermostat, printer, router, iot, unknown }
+enum DeviceType {
+  phone,
+  computer,
+  television,
+  thermostat,
+  printer,
+  router,
+  iot,
+  unknown,
+}
 
 enum DeviceClassification { known, unknown, mine, guest }
 

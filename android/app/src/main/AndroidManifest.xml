@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="whos_on_my_wifi"
+        android:label="Who's on My WiFi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

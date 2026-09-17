@@ -1,30 +1,65 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:whos_on_my_wifi/main.dart';
+import 'package:whos_on_my_wifi/app/wifi_app.dart';
+import 'package:whos_on_my_wifi/widgets/device_card.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets(
+    'Preview supports search, details, and an honest scan placeholder',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(const WifiApp());
+      await tester.pumpAndSettle();
+      expect(find.text("Who's on My WiFi"), findsOneWidget);
+      expect(find.text('8 of 8 devices'), findsOneWidget);
+      expect(find.text('Not scanned yet'), findsOneWidget);
+      await tester.tap(find.text('Scan Network'));
+      await tester.pumpAndSettle();
+      expect(find.text('Network scanning is coming'), findsOneWidget);
+      await tester.tap(find.text('Got it'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '192.168.1.24');
+      await tester.pumpAndSettle();
+      expect(find.text('1 of 8 devices'), findsOneWidget);
+      await tester.tap(find.byType(DeviceCard).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Device Details'), findsOneWidget);
+      expect(find.text('Identity'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'does not exist');
+      await tester.pumpAndSettle();
+      expect(find.text('No matching devices'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('Navigation and dark appearance work at phone width', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const WifiApp());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Saved Networks').last);
+    await tester.pumpAndSettle();
+    expect(find.text('A familiar place for every network'), findsOneWidget);
+    await tester.tap(find.text('Settings').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<ThemeMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+    expect(tester.takeException(), isNull);
   });
 }
