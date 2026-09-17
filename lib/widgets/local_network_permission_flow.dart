@@ -29,8 +29,7 @@ abstract final class LocalNetworkPermissionFlow {
           needsSettings
               ? '${status.label}\n\nScanning stays on your device.'
               : "Who's on My WiFi needs local network access to find devices connected to your network. "
-                    'Scanning stays on your device.\n\nDevice scanning is coming in a future update; '
-                    'you can prepare access now or continue without it.',
+                    'Scanning stays on your device. You can allow access now or continue without scanning.',
         ),
         actions: [
           TextButton(

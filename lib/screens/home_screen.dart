@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../services/network_scanner.dart';
+import '../utils/network_presentation.dart';
+import '../services/network_discovery_service.dart';
 import '../app/current_network_controller.dart';
 import '../models/network_info.dart';
 import '../widgets/current_network_card.dart';
@@ -20,7 +23,9 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.network,
+    this.scanner,
   });
+  final NetworkDiscoveryService? scanner;
   final DeviceRepository repository;
   final CurrentNetworkController network;
 
@@ -28,15 +33,69 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late Future<ScanResult> _snapshot = widget.repository.loadSnapshot();
+  ScanResult? _liveResult;
   final _searchController = TextEditingController();
   _DeviceFilter _filter = _DeviceFilter.all;
   _DeviceSort _sort = _DeviceSort.name;
   bool _scanBusy = false;
+  bool _disposed = false;
+  ScanCancellation? _cancellation;
+  NetworkInfo? _scanNetworkInfo;
+  late final NetworkDiscoveryService _scanner =
+      widget.scanner ??
+      NetworkScanner(networkInfoService: widget.network.service);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.network.addListener(_networkUpdated);
+  }
+
+  void _networkUpdated() {
+    final initial = _scanNetworkInfo;
+    if (!_scanBusy || initial == null || widget.network.isRefreshing) return;
+    final reason =
+        NetworkScanner.networkChangeReason(initial, widget.network.info) ??
+        (widget.network.permission.allowsAccess
+            ? null
+            : 'Local network permission unavailable. Scan stopped.');
+    if (reason != null) _cancelScan(reason);
+  }
+
+  void _cancelScan([String reason = 'Scan cancelled.']) {
+    final token = _cancellation;
+    if (token == null || token.isCancelled) return;
+    token.cancel(reason);
+    if (mounted && !_disposed) {
+      setState(
+        () => _liveResult = _liveResult?.withState(
+          ScanState.cancelled,
+          message: token.reason,
+        ),
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Inactive also occurs for Android permission dialogs; hidden/paused means
+    // backgrounded. The shared controller refreshes on resume without scanning.
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _cancelScan('App moved to the background. Scan cancelled.');
+    }
+  }
 
   @override
   void dispose() {
+    _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    widget.network.removeListener(_networkUpdated);
+    _cancellation?.cancel('Scan cancelled.');
     _searchController.dispose();
     super.dispose();
   }
@@ -77,12 +136,19 @@ class _HomeScreenState extends State<HomeScreen> {
     return devices;
   }
 
-  Future<void> _showScanPreview() async {
+  Future<void> _scanNetwork() async {
     if (_scanBusy) return;
-    setState(() => _scanBusy = true);
+    final token = ScanCancellation();
+    _cancellation = token;
+    setState(() {
+      _scanBusy = true;
+      _liveResult =
+          (_liveResult ?? ScanResult(network: widget.network.info, devices: []))
+              .withState(ScanState.preparing, resetProgress: true);
+    });
     try {
       await widget.network.refresh();
-      if (!mounted) return;
+      if (!mounted || token.isCancelled) return;
       final type = widget.network.info.connectionType;
       if (type == NetworkConnectionType.wifi ||
           type == NetworkConnectionType.ethernet) {
@@ -90,32 +156,39 @@ class _HomeScreenState extends State<HomeScreen> {
           context,
           widget.network,
         );
-        if (!mounted || !allowed) return;
+        if (!mounted || token.isCancelled) return;
+        if (!allowed) {
+          _cancelScan('Local network access not granted. Scan cancelled.');
+          return;
+        }
       }
-      if (!mounted) return;
-      await _showComingSoon();
+      if (!mounted || token.isCancelled) return;
+      _scanNetworkInfo = widget.network.info;
+      await _scanner.discover(
+        network: _scanNetworkInfo,
+        cancellation: token,
+        verifyNetwork: (initial) async {
+          if (token.isCancelled) return token.reason;
+          await widget.network.refresh(silently: true);
+          if (token.isCancelled) return token.reason;
+          return NetworkScanner.networkChangeReason(
+                initial,
+                widget.network.info,
+              ) ??
+              (widget.network.permission.allowsAccess
+                  ? null
+                  : 'Local network permission unavailable. Scan stopped.');
+        },
+        onProgress: (result) {
+          if (mounted && !_disposed) setState(() => _liveResult = result);
+        },
+      );
     } finally {
-      if (mounted) setState(() => _scanBusy = false);
+      _scanNetworkInfo = null;
+      _cancellation = null;
+      if (mounted && !_disposed) setState(() => _scanBusy = false);
     }
   }
-
-  Future<void> _showComingSoon() => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      icon: const Icon(Icons.wifi_find_rounded),
-      title: const Text('Network scanning is coming'),
-      content: const Text(
-        'This preview uses mock devices so you can explore the app. '
-        'No network traffic is sent and no scan has been performed.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Got it'),
-        ),
-      ],
-    ),
-  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -148,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final result = snapshot.data!;
+              final result = _liveResult ?? snapshot.data!;
               final devices = _visibleDevices(result);
               return CustomScrollView(
                 key: const PageStorageKey('devices-scroll'),
@@ -178,7 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             network: widget.network,
                             scanBusy: _scanBusy,
                             result: result,
-                            onScan: _showScanPreview,
+                            onScan: _scanNetwork,
+                            onCancel: _cancelScan,
                           ),
                           if (result.isMock) ...[
                             const SizedBox(height: 16),

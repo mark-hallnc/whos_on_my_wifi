@@ -20,11 +20,17 @@ class CurrentNetworkController extends ChangeNotifier
   bool _disposed = false;
   int _generation = 0;
 
-  Future<void> refresh() async {
+  Future<void>? _pendingRefresh;
+
+  Future<void> refresh({bool silently = false}) => _pendingRefresh ??= _refresh(
+    silently: silently,
+  ).whenComplete(() => _pendingRefresh = null);
+
+  Future<void> _refresh({required bool silently}) async {
     if (_disposed) return;
     final generation = ++_generation;
-    isRefreshing = true;
-    notifyListeners();
+    isRefreshing = !silently;
+    if (!silently) notifyListeners();
     NetworkInfo next;
     LocalNetworkPermissionStatus nextPermission;
     try {

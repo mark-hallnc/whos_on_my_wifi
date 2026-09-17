@@ -12,10 +12,12 @@ class CurrentNetworkCard extends StatelessWidget {
     required this.result,
     required this.onScan,
     this.scanBusy = false,
+    this.onCancel,
   });
   final CurrentNetworkController network;
   final ScanResult result;
   final VoidCallback onScan;
+  final VoidCallback? onCancel;
   final bool scanBusy;
 
   @override
@@ -128,14 +130,45 @@ class CurrentNetworkCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (result.state != ScanState.idle) ...[
+                const SizedBox(height: 12),
+                Text(
+                  result.message ??
+                      switch (result.state) {
+                        ScanState.preparing => 'Preparing scan...',
+                        ScanState.running => 'Scanning network...',
+                        ScanState.cancelled => 'Scan cancelled.',
+                        ScanState.failed => 'Scan failed.',
+                        ScanState.subnetTooLarge => 'Subnet too large to scan.',
+                        _ => 'Scan completed',
+                      },
+                ),
+                Text(
+                  '${result.addressesChecked} of ${result.totalCandidates} addresses checked; ${result.devicesFound} devices found',
+                ),
+                if (result.state == ScanState.running)
+                  LinearProgressIndicator(
+                    value: result.totalCandidates == 0
+                        ? 0
+                        : result.addressesChecked / result.totalCandidates,
+                  ),
+              ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: network.isRefreshing || scanBusy ? null : onScan,
+                onPressed: scanBusy
+                    ? (result.state == ScanState.cancelled ? null : onCancel)
+                    : (network.isRefreshing ? null : onScan),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 icon: const Icon(Icons.radar_rounded),
-                label: const Text('Scan Network'),
+                label: Text(
+                  scanBusy
+                      ? (result.state == ScanState.cancelled
+                            ? 'Stopping scan...'
+                            : 'Cancel Scan')
+                      : 'Scan Network',
+                ),
               ),
             ],
           ),

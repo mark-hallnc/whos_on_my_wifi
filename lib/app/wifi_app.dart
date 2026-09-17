@@ -4,7 +4,7 @@ import '../services/network_info_service.dart';
 import '../services/local_network_permission_service.dart';
 import 'current_network_controller.dart';
 import '../repositories/device_repository.dart';
-import '../repositories/mock_device_repository.dart';
+import '../repositories/session_device_repository.dart';
 import 'app_shell.dart';
 import 'app_theme.dart';
 
@@ -26,7 +26,7 @@ class WifiApp extends StatefulWidget {
 
 class _WifiAppState extends State<WifiApp> {
   late final DeviceRepository _repository =
-      widget.repository ?? MockDeviceRepository();
+      widget.repository ?? SessionDeviceRepository();
   ThemeMode _themeMode = ThemeMode.system;
   late final CurrentNetworkController _network;
 

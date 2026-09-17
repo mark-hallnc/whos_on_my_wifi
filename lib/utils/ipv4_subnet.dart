@@ -20,6 +20,8 @@ class Ipv4Subnet {
     final mask = prefixLength == 0
         ? 0
         : (0xffffffff << (32 - prefixLength)) & 0xffffffff;
+    _network = value & mask;
+    _local = value;
     subnetMask = _format(mask);
     networkAddress = _format(value & mask);
     // /31 is point-to-point and /32 is a host route: neither has broadcast.
@@ -29,6 +31,22 @@ class Ipv4Subnet {
   }
 
   final int prefixLength;
+  late final int _network;
+  late final int _local;
+  int get _first => _network + (prefixLength < 31 ? 1 : 0);
+  int get _end =>
+      _network + (1 << (32 - prefixLength)) - (prefixLength < 31 ? 1 : 0);
+
+  /// Usable remote addresses, excluding this device. /31 has no broadcast.
+  int get candidateCount =>
+      _end - _first - (_local >= _first && _local < _end ? 1 : 0);
+
+  Iterable<String> get candidates sync* {
+    for (var value = _first; value < _end; value++) {
+      if (value != _local) yield _format(value);
+    }
+  }
+
   late final String subnetMask;
   late final String networkAddress;
   late final String? broadcastAddress;

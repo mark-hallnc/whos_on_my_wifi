@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:whos_on_my_wifi/repositories/mock_device_repository.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:whos_on_my_wifi/app/wifi_app.dart';
@@ -18,38 +19,30 @@ void main() {
     ),
   );
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
-  testWidgets(
-    'Preview supports search, details, and an honest scan placeholder',
-    (tester) async {
-      tester.view.physicalSize = const Size(1000, 1600);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(const WifiApp());
-      await tester.pumpAndSettle();
-      expect(find.text("Who's on My WiFi"), findsOneWidget);
-      expect(find.text('8 of 8 devices'), findsOneWidget);
-      expect(find.text('Not scanned yet'), findsOneWidget);
-      await tester.tap(find.text('Scan Network'));
-      await tester.pumpAndSettle();
-      expect(find.text('Network scanning is coming'), findsOneWidget);
-      await tester.tap(find.text('Got it'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '192.168.1.24');
-      await tester.pumpAndSettle();
-      expect(find.text('1 of 8 devices'), findsOneWidget);
-      await tester.tap(find.byType(DeviceCard).first);
-      await tester.pumpAndSettle();
-      expect(find.text('Device Details'), findsOneWidget);
-      expect(find.text('Identity'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'does not exist');
-      await tester.pumpAndSettle();
-      expect(find.text('No matching devices'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('Explicit preview supports search and details', (tester) async {
+    tester.view.physicalSize = const Size(1000, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(WifiApp(repository: MockDeviceRepository()));
+    await tester.pumpAndSettle();
+    expect(find.text("Who's on My WiFi"), findsOneWidget);
+    expect(find.text('8 of 8 devices'), findsOneWidget);
+    expect(find.text('Not scanned yet'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '192.168.1.24');
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 8 devices'), findsOneWidget);
+    await tester.tap(find.byType(DeviceCard).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Device Details'), findsOneWidget);
+    expect(find.text('Identity'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'does not exist');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching devices'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Navigation and dark appearance work at phone width', (
     tester,

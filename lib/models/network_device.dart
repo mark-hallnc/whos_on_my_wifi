@@ -31,14 +31,21 @@ class NetworkDevice {
     this.classification = DeviceClassification.unknown,
     this.confidence = IdentificationConfidence.low,
     this.notes = '',
+    this.isCurrentDevice = false,
+    this.isGateway = false,
+    List<String> discoveryEvidence = const [],
     List<DiscoveredService> services = const [],
     List<int> openPorts = const [],
     List<String> previousIpAddresses = const [],
-  }) : services = List.unmodifiable(services),
+  }) : discoveryEvidence = List.unmodifiable(discoveryEvidence),
+       services = List.unmodifiable(services),
        openPorts = List.unmodifiable(openPorts),
        previousIpAddresses = List.unmodifiable(previousIpAddresses);
 
   final String id;
+  final bool isCurrentDevice;
+  final bool isGateway;
+  final List<String> discoveryEvidence;
   final String? customName;
   final String? hostname;
   final String ipAddress;
@@ -56,8 +63,10 @@ class NetworkDevice {
   final List<String> previousIpAddresses;
 
   String get displayName {
+    if (isCurrentDevice) return 'This device';
+    if (isGateway) return 'Router / Gateway';
     if (customName?.trim().isNotEmpty ?? false) return customName!.trim();
     if (hostname?.trim().isNotEmpty ?? false) return hostname!.trim();
-    return 'Unidentified device';
+    return 'Unknown device';
   }
 }

@@ -111,9 +111,7 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'Discovered services',
                 children: [
                   if (device.services.isEmpty)
-                    const Text(
-                      'No services in this example. Service discovery is not implemented.',
-                    )
+                    const Text('Service discovery has not been performed.')
                   else
                     ...device.services.map(
                       (service) => InfoRow(
@@ -129,11 +127,13 @@ class DeviceDetailsScreen extends StatelessWidget {
                 children: [
                   Text(
                     device.openPorts.isEmpty
-                        ? 'No port information in this example.'
-                        : 'Example open ports: ${device.openPorts.join(', ')}',
+                        ? 'No port information recorded.'
+                        : 'Open ports: ${device.openPorts.join(', ')}',
                   ),
                   const SizedBox(height: 8),
-                  const Text('Port detection has not been performed.'),
+                  const Text(
+                    'Host discovery stops after the first successful connection.',
+                  ),
                 ],
               ),
               InfoSection(
@@ -177,7 +177,12 @@ class DeviceDetailsScreen extends StatelessWidget {
                     'Data source',
                     isMock ? 'Mock device repository' : 'Device repository',
                   ),
-                  const InfoRow('Discovery methods', 'Not run'),
+                  InfoRow(
+                    'Discovery evidence',
+                    device.discoveryEvidence.isEmpty
+                        ? 'Not recorded'
+                        : device.discoveryEvidence.join('; '),
+                  ),
                 ],
               ),
             ],
