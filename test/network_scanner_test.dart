@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:whos_on_my_wifi/services/network_discovery_service.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,19 @@ NetworkInfo network(int prefix, {String? gateway}) => NetworkInfo(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const nsd = MethodChannel('whos_on_my_wifi/nsd');
+  setUp(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          nsd,
+          (_) async => throw MissingPluginException(),
+        ),
+  );
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(nsd, null),
+  );
   test('/24 excludes current device, network and broadcast', () {
     final subnet = Ipv4Subnet('192.168.1.77', 24);
     expect(subnet.candidateCount, 253);

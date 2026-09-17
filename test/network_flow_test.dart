@@ -13,6 +13,7 @@ import 'package:whos_on_my_wifi/app/wifi_app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('whos_on_my_wifi/network');
+  const nsdChannel = MethodChannel('whos_on_my_wifi/nsd');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Map<String, Object?> network;
@@ -22,6 +23,10 @@ void main() {
   late int settingsOpened;
   late String requestResult;
   setUp(() {
+    messenger.setMockMethodCallHandler(
+      nsdChannel,
+      (_) async => throw MissingPluginException(),
+    );
     network = {
       'connectionType': 'wifi',
       'isWifiConnected': true,
@@ -52,7 +57,10 @@ void main() {
       }
     });
   });
-  tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  tearDown(() {
+    messenger.setMockMethodCallHandler(channel, null);
+    messenger.setMockMethodCallHandler(nsdChannel, null);
+  });
 
   Future<void> launch(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1000, 1800);

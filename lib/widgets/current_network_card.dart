@@ -137,6 +137,8 @@ class CurrentNetworkCard extends StatelessWidget {
                       switch (result.state) {
                         ScanState.preparing => 'Preparing scan...',
                         ScanState.running => 'Scanning network...',
+                        ScanState.discoveringServices =>
+                          'Discovering local services...',
                         ScanState.cancelled => 'Scan cancelled.',
                         ScanState.failed => 'Scan failed.',
                         ScanState.subnetTooLarge => 'Subnet too large to scan.',

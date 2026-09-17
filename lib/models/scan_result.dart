@@ -5,6 +5,7 @@ enum ScanState {
   idle,
   preparing,
   running,
+  discoveringServices,
   completed,
   cancelled,
   failed,

@@ -7,6 +7,8 @@ import '../models/scan_result.dart';
 import '../utils/ipv4_subnet.dart';
 import 'network_discovery_service.dart';
 import 'network_info_service.dart';
+import 'local_service_discovery_service.dart';
+import 'service_device_merger.dart';
 
 typedef HostProbe = Future<List<String>> Function(String address);
 
@@ -14,7 +16,8 @@ class NetworkScanner implements NetworkDiscoveryService {
   NetworkScanner({
     this.networkInfoService = const NetworkInfoService(),
     this.probe,
-  });
+    LocalServiceDiscovery? serviceDiscovery,
+  }) : serviceDiscovery = serviceDiscovery ?? AndroidNsdDiscoveryService();
 
   static const concurrency = 40;
   static const maxCandidates = 1024;
@@ -22,6 +25,7 @@ class NetworkScanner implements NetworkDiscoveryService {
   static const tcpPorts = [80, 443, 22, 445];
   final NetworkInfoService networkInfoService;
   final HostProbe? probe;
+  final LocalServiceDiscovery serviceDiscovery;
   Future<ScanResult>? _active;
 
   /// Compare OS identity, not the display name/SSID (which can be unavailable).
@@ -112,6 +116,8 @@ class NetworkScanner implements NetworkDiscoveryService {
     final devices = <String, NetworkDevice>{};
     var total = 0;
     var checked = 0;
+    final serviceLimitations = <String>[];
+    var servicesStarted = false;
     ScanResult snapshot(ScanState state, [String? message]) => ScanResult(
       network: info,
       devices: devices.values.toList(),
@@ -121,9 +127,14 @@ class NetworkScanner implements NetworkDiscoveryService {
       totalCandidates: total,
       addressesChecked: checked,
       message: message,
-      discoveryMethods: const ['Local network metadata', 'TCP connection'],
-      limitations: const [
-        'Devices that do not accept connections on ports 80, 443, 22 or 445 may be missed.',
+      discoveryMethods: [
+        'Local network metadata',
+        'TCP connection',
+        if (servicesStarted) 'mDNS / Android NSD',
+      ],
+      limitations: [
+        ...serviceLimitations,
+        'Devices with no TCP response or resolved service advertisement may be missed.',
         'The gateway is included from network metadata, not proof of a probe response.',
       ],
     );
@@ -251,6 +262,31 @@ class NetworkScanner implements NetworkDiscoveryService {
       // Wait for all active workers before publishing the terminal state.
       await Future.wait(
         List.generate(min(concurrency, total), (_) => worker()),
+      );
+      if (cancellation.isCancelled) return cancelled();
+      servicesStarted = true;
+      onProgress?.call(
+        snapshot(
+          ScanState.discoveringServices,
+          'Discovering local services...',
+        ),
+      );
+      serviceLimitations.addAll(
+        await serviceDiscovery.discover(
+          network: info,
+          cancellation: cancellation,
+          verifyNetwork: verify,
+          onService: (service) async {
+            if (cancellation.isCancelled) return;
+            ServiceDeviceMerger.merge(devices, service, info);
+            onProgress?.call(
+              snapshot(
+                ScanState.discoveringServices,
+                'Discovering local services...',
+              ),
+            );
+          },
+        ),
       );
       if (cancellation.isCancelled) return cancelled();
       final result = snapshot(ScanState.completed);

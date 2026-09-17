@@ -111,12 +111,12 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'Discovered services',
                 children: [
                   if (device.services.isEmpty)
-                    const Text('Service discovery has not been performed.')
+                    const Text('No local services discovered.')
                   else
                     ...device.services.map(
                       (service) => InfoRow(
-                        service.name,
-                        '${service.type} • ${service.discoveryMethod}'
+                        service.label,
+                        '${service.name}\n${service.type} • ${service.discoveryMethod}'
                         '${service.port == null ? '' : ' • ${service.transport} ${service.port}'}',
                       ),
                     ),
@@ -128,11 +128,11 @@ class DeviceDetailsScreen extends StatelessWidget {
                   Text(
                     device.openPorts.isEmpty
                         ? 'No port information recorded.'
-                        : 'Open ports: ${device.openPorts.join(', ')}',
+                        : 'Observed / advertised ports: ${device.openPorts.join(', ')}',
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Host discovery stops after the first successful connection.',
+                    'Advertised ports come from service announcements and are not additional TCP probes.',
                   ),
                 ],
               ),
@@ -173,6 +173,20 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'Technical details',
                 children: [
                   InfoRow('Local device ID', device.id),
+                  for (final service in device.services)
+                    if (service.attributes.isNotEmpty ||
+                        service.addresses.isNotEmpty)
+                      ExpansionTile(
+                        title: Text('${service.label}: technical attributes'),
+                        children: [
+                          if (service.hostname != null)
+                            InfoRow('Hostname', service.hostname!),
+                          if (service.addresses.isNotEmpty)
+                            InfoRow('Addresses', service.addresses.join(', ')),
+                          for (final entry in service.attributes.entries)
+                            InfoRow(entry.key, entry.value),
+                        ],
+                      ),
                   InfoRow(
                     'Data source',
                     isMock ? 'Mock device repository' : 'Device repository',
