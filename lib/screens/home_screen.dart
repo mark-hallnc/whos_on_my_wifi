@@ -5,6 +5,7 @@ import '../services/network_discovery_service.dart';
 import '../app/current_network_controller.dart';
 import '../models/network_info.dart';
 import '../widgets/current_network_card.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/local_network_permission_flow.dart';
 import '../models/network_device.dart';
 import '../models/scan_result.dart';
@@ -24,7 +25,9 @@ class HomeScreen extends StatefulWidget {
     required this.repository,
     required this.network,
     this.scanner,
+    this.showAdBanner = true,
   });
+  final bool showAdBanner;
   final NetworkDiscoveryService? scanner;
   final DeviceRepository repository;
   final CurrentNetworkController network;
@@ -192,9 +195,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text("Who's on My WiFi")),
+    bottomNavigationBar: AdBannerSlot(enabled: widget.showAdBanner),
     body: SafeArea(
-      top: false,
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
@@ -232,21 +234,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            'Meet your network',
-                            style: Theme.of(context).textTheme.headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'A little clarity about your connected home.',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
                           CurrentNetworkCard(
                             network: widget.network,
                             scanBusy: _scanBusy,
