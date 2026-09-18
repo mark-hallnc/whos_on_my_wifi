@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:whos_on_my_wifi/models/discovered_service.dart';
 import 'package:whos_on_my_wifi/models/network_device.dart';
 import 'package:whos_on_my_wifi/models/network_info.dart';
@@ -67,11 +68,7 @@ class FakeHeaders implements HttpHeaders {
 }
 
 class FakeResponse extends StreamView<List<int>> implements HttpClientResponse {
-  FakeResponse(
-    super.stream, {
-    this.statusCode = 200,
-    this.contentLength = -1,
-  });
+  FakeResponse(super.stream, {this.statusCode = 200, this.contentLength = -1});
   @override
   final int statusCode;
   @override
@@ -201,6 +198,12 @@ class FixtureSsdp implements SsdpDiscovery {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const neighbors = MethodChannel('whos_on_my_wifi/neighbors');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  setUp(() => messenger.setMockMethodCallHandler(neighbors, (_) async => null));
+  tearDown(() => messenger.setMockMethodCallHandler(neighbors, null));
   for (final cancel in [false, true]) {
     test(
       'normal scanner integrates SSDP and preserves partial results: cancel=$cancel',

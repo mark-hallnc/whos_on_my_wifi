@@ -77,6 +77,17 @@ class DeviceDetailsScreen extends StatelessWidget {
                   ),
                   InfoRow('IP address', device.ipAddress),
                   InfoRow('MAC address', device.macAddress ?? 'Unavailable'),
+                  if (device.macAddress != null)
+                    InfoRow(
+                      'MAC vendor',
+                      device.isPrivateMac
+                          ? 'Private/randomized address'
+                          : device.macVendor ?? 'Unknown',
+                    ),
+                  if (device.isPrivateMac)
+                    const Text(
+                      'Private/randomized MAC address. Manufacturer cannot be determined reliably from this address.',
+                    ),
                   const Text(
                     'MAC addresses may be unavailable on Android or randomized by devices.',
                   ),
@@ -181,6 +192,8 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'Technical details',
                 children: [
                   InfoRow('Local device ID', device.id),
+                  if (device.macSource != null)
+                    InfoRow('MAC source', device.macSource!),
                   if (device.ssdpAdvertisements.isNotEmpty)
                     ExpansionTile(
                       title: const Text('Smart-device technical details'),

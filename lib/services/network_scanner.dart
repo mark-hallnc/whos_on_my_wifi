@@ -11,6 +11,9 @@ import 'local_service_discovery_service.dart';
 import 'service_device_merger.dart';
 import 'ssdp_discovery_service.dart';
 import 'ssdp_device_merger.dart';
+import 'neighbor_table_service.dart';
+import 'vendor_lookup_service.dart';
+import 'mac_device_enricher.dart';
 
 typedef HostProbe = Future<List<String>> Function(String address);
 
@@ -20,8 +23,11 @@ class NetworkScanner implements NetworkDiscoveryService {
     this.probe,
     LocalServiceDiscovery? serviceDiscovery,
     SsdpDiscovery? ssdpDiscovery,
+    this.neighborTable = const NeighborTableService(),
+    VendorLookupService? vendorLookup,
   }) : serviceDiscovery = serviceDiscovery ?? AndroidNsdDiscoveryService(),
-       ssdpDiscovery = ssdpDiscovery ?? SsdpDiscoveryService();
+       ssdpDiscovery = ssdpDiscovery ?? SsdpDiscoveryService(),
+       vendorLookup = vendorLookup ?? VendorLookupService.bundled;
 
   static const concurrency = 40;
   static const maxCandidates = 1024;
@@ -31,6 +37,8 @@ class NetworkScanner implements NetworkDiscoveryService {
   final HostProbe? probe;
   final LocalServiceDiscovery serviceDiscovery;
   final SsdpDiscovery ssdpDiscovery;
+  final NeighborTableService neighborTable;
+  final VendorLookupService vendorLookup;
   Future<ScanResult>? _active;
 
   /// Compare OS identity, not the display name/SSID (which can be unavailable).
@@ -324,6 +332,24 @@ class NetworkScanner implements NetworkDiscoveryService {
         ),
       );
       if (cancellation.isCancelled) return cancelled();
+      onProgress?.call(
+        snapshot(ScanState.discoveringServices, 'Identifying devices...'),
+      );
+      await verify();
+      if (cancellation.isCancelled) return cancelled();
+      final neighbors = await neighborTable.read(info, cancellation);
+      await verify();
+      if (cancellation.isCancelled) return cancelled();
+      if (neighbors.isNotEmpty) {
+        try {
+          await vendorLookup.loadBundledDatabase();
+        } on Exception {
+          serviceLimitations.add('Bundled MAC vendor information unavailable.');
+        }
+        await verify();
+        if (cancellation.isCancelled) return cancelled();
+        MacDeviceEnricher.merge(devices, neighbors, vendorLookup);
+      }
       final result = snapshot(ScanState.completed);
       onProgress?.call(result);
       return result;

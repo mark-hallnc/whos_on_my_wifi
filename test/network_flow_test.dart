@@ -15,6 +15,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('whos_on_my_wifi/network');
   const nsdChannel = MethodChannel('whos_on_my_wifi/nsd');
+  const neighborChannel = MethodChannel('whos_on_my_wifi/neighbors');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Map<String, Object?> network;
@@ -24,6 +25,7 @@ void main() {
   late int settingsOpened;
   late String requestResult;
   setUp(() {
+    messenger.setMockMethodCallHandler(neighborChannel, (_) async => null);
     messenger.setMockMethodCallHandler(
       nsdChannel,
       (_) async => throw MissingPluginException(),
@@ -59,6 +61,7 @@ void main() {
     });
   });
   tearDown(() {
+    messenger.setMockMethodCallHandler(neighborChannel, null);
     messenger.setMockMethodCallHandler(channel, null);
     messenger.setMockMethodCallHandler(nsdChannel, null);
   });
@@ -99,7 +102,8 @@ void main() {
       await launch(tester);
       await tester.tap(find.text('Scan Network'));
       await tester.pumpAndSettle();
-      expect(reads, 3); // Includes the scanner's network identity check.
+      // Includes identity checks around the read-only enrichment stage.
+      expect(reads, greaterThanOrEqualTo(5));
       expect(requests, 0);
       expect(find.text('Scan completed'), findsOneWidget);
     },

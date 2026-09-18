@@ -1,5 +1,6 @@
 import 'discovered_service.dart';
 import 'upnp_description.dart';
+import 'mac_address.dart';
 
 enum DeviceType {
   phone,
@@ -33,8 +34,10 @@ class NetworkDevice {
     this.modelDescription,
     this.upnpDescription,
     List<SsdpAdvertisement> ssdpAdvertisements = const [],
-    this.macAddress,
-    this.manufacturer,
+    String? macAddress,
+    String? manufacturer,
+    this.macVendor,
+    this.macSource,
     this.type = DeviceType.unknown,
     this.isOnline = false,
     this.classification = DeviceClassification.unknown,
@@ -46,7 +49,9 @@ class NetworkDevice {
     List<DiscoveredService> services = const [],
     List<int> openPorts = const [],
     List<String> previousIpAddresses = const [],
-  }) : ssdpAdvertisements = List.unmodifiable(ssdpAdvertisements),
+  }) : macAddress = MacAddress.parse(macAddress)?.value,
+       reportedManufacturer = manufacturer,
+       ssdpAdvertisements = List.unmodifiable(ssdpAdvertisements),
        discoveryEvidence = List.unmodifiable(discoveryEvidence),
        services = List.unmodifiable(services),
        openPorts = List.unmodifiable(openPorts),
@@ -66,7 +71,13 @@ class NetworkDevice {
   final List<SsdpAdvertisement> ssdpAdvertisements;
   final String ipAddress;
   final String? macAddress;
-  final String? manufacturer;
+  final String? reportedManufacturer;
+  final String? macVendor;
+  final String? macSource;
+  bool get isPrivateMac =>
+      MacAddress.parse(macAddress)?.isLocallyAdministered ?? false;
+  String? get manufacturer =>
+      reportedManufacturer ?? (isPrivateMac ? null : macVendor);
   final DeviceType type;
   final bool isOnline;
   final DeviceClassification classification;
@@ -77,6 +88,41 @@ class NetworkDevice {
   final List<DiscoveredService> services;
   final List<int> openPorts;
   final List<String> previousIpAddresses;
+
+  /// Retain the session ID; a MAC observation may later inform persistent identity.
+  NetworkDevice withMac(MacAddress mac, String source, String? vendor) =>
+      NetworkDevice(
+        id: id,
+        ipAddress: ipAddress,
+        firstSeen: firstSeen,
+        lastSeen: lastSeen,
+        customName: customName,
+        hostname: hostname,
+        discoveredName: discoveredName,
+        modelName: modelName,
+        modelNumber: modelNumber,
+        modelDescription: modelDescription,
+        upnpDescription: upnpDescription,
+        ssdpAdvertisements: ssdpAdvertisements,
+        macAddress: mac.value,
+        manufacturer: reportedManufacturer,
+        macVendor: mac.isLocallyAdministered ? null : vendor,
+        macSource: source,
+        type: type,
+        isOnline: isOnline,
+        classification: classification,
+        confidence: confidence,
+        notes: notes,
+        isCurrentDevice: isCurrentDevice,
+        isGateway: isGateway,
+        discoveryEvidence: {
+          ...discoveryEvidence,
+          'MAC observed in $source',
+        }.toList(),
+        services: services,
+        openPorts: openPorts,
+        previousIpAddresses: previousIpAddresses,
+      );
 
   String get displayName {
     if (isCurrentDevice) return 'This device';
