@@ -1,3 +1,4 @@
+import 'support/no_ssdp_discovery.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -223,7 +224,10 @@ void main() {
     'platform bridge merges NSD-only devices into final scanner results',
     () async {
       final updates = <ScanResult>[];
-      final scanner = NetworkScanner(probe: (_) async => []);
+      final scanner = NetworkScanner(
+        ssdpDiscovery: const NoSsdpDiscovery(),
+        probe: (_) async => [],
+      );
       final pending = scanner.discover(
         network: network,
         onProgress: updates.add,
@@ -248,11 +252,15 @@ void main() {
     () async {
       final token = ScanCancellation();
       final updates = <ScanResult>[];
-      final pending = NetworkScanner(probe: (_) async => []).discover(
-        network: network,
-        cancellation: token,
-        onProgress: updates.add,
-      );
+      final pending =
+          NetworkScanner(
+            ssdpDiscovery: const NoSsdpDiscovery(),
+            probe: (_) async => [],
+          ).discover(
+            network: network,
+            cancellation: token,
+            onProgress: updates.add,
+          );
       await started.future;
       await emit('service', service());
       token.cancel();
@@ -269,11 +277,15 @@ void main() {
     'network change during NSD drops evidence and preserves TCP results',
     () async {
       var changed = false;
-      final pending = NetworkScanner(probe: (_) async => []).discover(
-        network: network,
-        verifyNetwork: (_) async =>
-            changed ? 'Network changed. Scan stopped.' : null,
-      );
+      final pending =
+          NetworkScanner(
+            ssdpDiscovery: const NoSsdpDiscovery(),
+            probe: (_) async => [],
+          ).discover(
+            network: network,
+            verifyNetwork: (_) async =>
+                changed ? 'Network changed. Scan stopped.' : null,
+          );
       await started.future;
       changed = true;
       await emit('service', service());

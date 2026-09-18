@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/network_info_service.dart';
+import '../services/network_discovery_service.dart';
 import '../services/local_network_permission_service.dart';
 import 'current_network_controller.dart';
 import '../repositories/device_repository.dart';
@@ -12,11 +13,13 @@ class WifiApp extends StatefulWidget {
   const WifiApp({
     super.key,
     this.repository,
+    this.scanner,
     this.networkInfoService = const NetworkInfoService(),
     this.permissionService = const LocalNetworkPermissionService(),
   });
 
   final DeviceRepository? repository;
+  final NetworkDiscoveryService? scanner;
   final NetworkInfoService networkInfoService;
   final LocalNetworkPermissionService permissionService;
 
@@ -55,6 +58,7 @@ class _WifiAppState extends State<WifiApp> {
     themeMode: _themeMode,
     home: AppShell(
       network: _network,
+      scanner: widget.scanner,
       repository: _repository,
       themeMode: _themeMode,
       onThemeChanged: (mode) => setState(() => _themeMode = mode),

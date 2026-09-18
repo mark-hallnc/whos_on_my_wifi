@@ -60,6 +60,8 @@ class DeviceDetailsScreen extends StatelessWidget {
                     'Discovered hostname',
                     device.hostname ?? 'Unavailable',
                   ),
+                  if (device.discoveredName != null)
+                    InfoRow('Discovered name', device.discoveredName!),
                   InfoRow('Classification', device.classification.label),
                   const Text(
                     'Naming and classification editing will be available in a future update.',
@@ -96,6 +98,12 @@ class DeviceDetailsScreen extends StatelessWidget {
                     'Manufacturer / vendor',
                     device.manufacturer ?? 'Unavailable',
                   ),
+                  if (device.modelName != null)
+                    InfoRow('Model', device.modelName!),
+                  if (device.modelNumber != null)
+                    InfoRow('Model number', device.modelNumber!),
+                  if (device.modelDescription != null)
+                    InfoRow('Model description', device.modelDescription!),
                   InfoRow('Likely device type', device.type.label),
                   InfoRow('Confidence', switch (device.confidence) {
                     IdentificationConfidence.low => 'Low',
@@ -173,6 +181,19 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'Technical details',
                 children: [
                   InfoRow('Local device ID', device.id),
+                  if (device.ssdpAdvertisements.isNotEmpty)
+                    ExpansionTile(
+                      title: const Text('Smart-device technical details'),
+                      children: [
+                        if (device.upnpDescription != null)
+                          for (final entry
+                              in device.upnpDescription!.fields.entries)
+                            InfoRow(entry.key, entry.value),
+                        for (final ad in device.ssdpAdvertisements)
+                          for (final entry in ad.headers.entries)
+                            InfoRow(entry.key.toUpperCase(), entry.value),
+                      ],
+                    ),
                   for (final service in device.services)
                     if (service.attributes.isNotEmpty ||
                         service.addresses.isNotEmpty)

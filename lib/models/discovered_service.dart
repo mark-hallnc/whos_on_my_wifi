@@ -34,6 +34,6 @@ class DiscoveredService {
     '_smb._tcp.' => 'File sharing',
     '_workstation._tcp.' => 'Workstation',
     '_device-info._tcp.' => 'Device information',
-    _ => 'Local service',
+    _ => discoveryMethod == 'SSDP / UPnP' ? name : 'Local service',
   };
 }

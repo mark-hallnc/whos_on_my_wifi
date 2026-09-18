@@ -9,6 +9,8 @@ import 'network_discovery_service.dart';
 import 'network_info_service.dart';
 import 'local_service_discovery_service.dart';
 import 'service_device_merger.dart';
+import 'ssdp_discovery_service.dart';
+import 'ssdp_device_merger.dart';
 
 typedef HostProbe = Future<List<String>> Function(String address);
 
@@ -17,7 +19,9 @@ class NetworkScanner implements NetworkDiscoveryService {
     this.networkInfoService = const NetworkInfoService(),
     this.probe,
     LocalServiceDiscovery? serviceDiscovery,
-  }) : serviceDiscovery = serviceDiscovery ?? AndroidNsdDiscoveryService();
+    SsdpDiscovery? ssdpDiscovery,
+  }) : serviceDiscovery = serviceDiscovery ?? AndroidNsdDiscoveryService(),
+       ssdpDiscovery = ssdpDiscovery ?? SsdpDiscoveryService();
 
   static const concurrency = 40;
   static const maxCandidates = 1024;
@@ -26,6 +30,7 @@ class NetworkScanner implements NetworkDiscoveryService {
   final NetworkInfoService networkInfoService;
   final HostProbe? probe;
   final LocalServiceDiscovery serviceDiscovery;
+  final SsdpDiscovery ssdpDiscovery;
   Future<ScanResult>? _active;
 
   /// Compare OS identity, not the display name/SSID (which can be unavailable).
@@ -118,6 +123,7 @@ class NetworkScanner implements NetworkDiscoveryService {
     var checked = 0;
     final serviceLimitations = <String>[];
     var servicesStarted = false;
+    var ssdpStarted = false;
     ScanResult snapshot(ScanState state, [String? message]) => ScanResult(
       network: info,
       devices: devices.values.toList(),
@@ -131,6 +137,7 @@ class NetworkScanner implements NetworkDiscoveryService {
         'Local network metadata',
         'TCP connection',
         if (servicesStarted) 'mDNS / Android NSD',
+        if (ssdpStarted) 'SSDP / UPnP',
       ],
       limitations: [
         ...serviceLimitations,
@@ -283,6 +290,34 @@ class NetworkScanner implements NetworkDiscoveryService {
               snapshot(
                 ScanState.discoveringServices,
                 'Discovering local services...',
+              ),
+            );
+          },
+        ),
+      );
+      if (cancellation.isCancelled) return cancelled();
+      ssdpStarted = true;
+      onProgress?.call(
+        snapshot(ScanState.discoveringServices, 'Looking for smart devices...'),
+      );
+      serviceLimitations.addAll(
+        await ssdpDiscovery.discover(
+          network: info,
+          cancellation: cancellation,
+          verifyNetwork: verify,
+          onDevice: (advertisement, description, location) {
+            if (cancellation.isCancelled) return;
+            SsdpDeviceMerger.merge(
+              devices,
+              advertisement,
+              info,
+              description: description,
+              location: location,
+            );
+            onProgress?.call(
+              snapshot(
+                ScanState.discoveringServices,
+                'Looking for smart devices...',
               ),
             );
           },

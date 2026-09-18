@@ -10,6 +10,8 @@ extension DeviceTypePresentation on DeviceType {
     DeviceType.printer => 'Printer',
     DeviceType.router => 'Router',
     DeviceType.iot => 'IoT device',
+    DeviceType.mediaDevice => 'Media device',
+    DeviceType.camera => 'Camera',
     DeviceType.unknown => 'Unknown type',
   };
 
@@ -21,6 +23,8 @@ extension DeviceTypePresentation on DeviceType {
     DeviceType.printer => Icons.print_rounded,
     DeviceType.router => Icons.router_rounded,
     DeviceType.iot => Icons.sensors_rounded,
+    DeviceType.mediaDevice => Icons.cast_rounded,
+    DeviceType.camera => Icons.videocam_rounded,
     DeviceType.unknown => Icons.devices_other_rounded,
   };
 }

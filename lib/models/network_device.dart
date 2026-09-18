@@ -1,4 +1,5 @@
 import 'discovered_service.dart';
+import 'upnp_description.dart';
 
 enum DeviceType {
   phone,
@@ -8,6 +9,8 @@ enum DeviceType {
   printer,
   router,
   iot,
+  mediaDevice,
+  camera,
   unknown,
 }
 
@@ -24,6 +27,12 @@ class NetworkDevice {
     required this.lastSeen,
     this.customName,
     this.hostname,
+    this.discoveredName,
+    this.modelName,
+    this.modelNumber,
+    this.modelDescription,
+    this.upnpDescription,
+    List<SsdpAdvertisement> ssdpAdvertisements = const [],
     this.macAddress,
     this.manufacturer,
     this.type = DeviceType.unknown,
@@ -37,7 +46,8 @@ class NetworkDevice {
     List<DiscoveredService> services = const [],
     List<int> openPorts = const [],
     List<String> previousIpAddresses = const [],
-  }) : discoveryEvidence = List.unmodifiable(discoveryEvidence),
+  }) : ssdpAdvertisements = List.unmodifiable(ssdpAdvertisements),
+       discoveryEvidence = List.unmodifiable(discoveryEvidence),
        services = List.unmodifiable(services),
        openPorts = List.unmodifiable(openPorts),
        previousIpAddresses = List.unmodifiable(previousIpAddresses);
@@ -48,6 +58,12 @@ class NetworkDevice {
   final List<String> discoveryEvidence;
   final String? customName;
   final String? hostname;
+  final String? discoveredName;
+  final String? modelName;
+  final String? modelNumber;
+  final String? modelDescription;
+  final UpnpDescription? upnpDescription;
+  final List<SsdpAdvertisement> ssdpAdvertisements;
   final String ipAddress;
   final String? macAddress;
   final String? manufacturer;
@@ -66,6 +82,9 @@ class NetworkDevice {
     if (isCurrentDevice) return 'This device';
     if (isGateway) return 'Router / Gateway';
     if (customName?.trim().isNotEmpty ?? false) return customName!.trim();
+    if (discoveredName?.trim().isNotEmpty ?? false) {
+      return discoveredName!.trim();
+    }
     if (hostname?.trim().isNotEmpty ?? false) return hostname!.trim();
     return 'Unknown device';
   }

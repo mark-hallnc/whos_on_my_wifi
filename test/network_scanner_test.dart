@@ -1,3 +1,4 @@
+import 'support/no_ssdp_discovery.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:whos_on_my_wifi/services/network_discovery_service.dart';
@@ -63,6 +64,7 @@ void main() {
   test('over-cap result does not probe any addresses', () async {
     var probes = 0;
     final scanner = NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async {
         probes++;
         return [];
@@ -77,6 +79,7 @@ void main() {
   });
   test('/22 stays under cap and is fully checked', () async {
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => [],
     ).discover(network: network(22));
     expect(result.state, ScanState.completed);
@@ -91,6 +94,7 @@ void main() {
       final probed = <String>[];
       final updates = <ScanResult>[];
       final scanner = NetworkScanner(
+        ssdpDiscovery: const NoSsdpDiscovery(),
         probe: (ip) async {
           probed.add(ip);
           active++;
@@ -132,6 +136,7 @@ void main() {
   );
   test('unknown remote host contains only observed identity', () async {
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => ['TCP success'],
     ).discover(network: network(30));
     final remote = result.devices.last;
@@ -145,6 +150,7 @@ void main() {
   test('probe failure has a final failed state', () async {
     final updates = <ScanResult>[];
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => throw StateError('failure'),
     ).discover(network: network(24), onProgress: updates.add);
     expect(result.state, ScanState.failed);
@@ -154,6 +160,7 @@ void main() {
   test('missing prefix never assumes /24', () async {
     final result =
         await NetworkScanner(
+          ssdpDiscovery: const NoSsdpDiscovery(),
           probe: (_) async => fail('Unexpected probe'),
         ).discover(
           network: const NetworkInfo(
@@ -166,6 +173,7 @@ void main() {
   });
   test('/32 includes current device once even if also gateway', () async {
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => fail('Unexpected probe'),
     ).discover(network: network(32, gateway: '192.168.1.1'));
     expect(result.state, ScanState.completed);
@@ -182,6 +190,7 @@ void main() {
       final token = ScanCancellation();
       final updates = <ScanResult>[];
       final scanner = NetworkScanner(
+        ssdpDiscovery: const NoSsdpDiscovery(),
         probe: (_) {
           final probe = Completer<List<String>>();
           pending.add(probe);
@@ -229,6 +238,7 @@ void main() {
       var current = initial;
       final probes = <Completer<List<String>>>[];
       final scanner = NetworkScanner(
+        ssdpDiscovery: const NoSsdpDiscovery(),
         probe: (_) {
           final probe = Completer<List<String>>();
           probes.add(probe);
@@ -298,6 +308,7 @@ void main() {
 
   test('permission loss cancels instead of failing', () async {
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => throw const SocketException(
         'Permission denied',
         osError: OSError('Permission denied', 13),
@@ -310,6 +321,7 @@ void main() {
   test('already cancelled preparation does not schedule work', () async {
     final token = ScanCancellation()..cancel();
     final result = await NetworkScanner(
+      ssdpDiscovery: const NoSsdpDiscovery(),
       probe: (_) async => fail('Unexpected probe'),
     ).discover(network: network(24), cancellation: token);
     expect(result.state, ScanState.cancelled);
