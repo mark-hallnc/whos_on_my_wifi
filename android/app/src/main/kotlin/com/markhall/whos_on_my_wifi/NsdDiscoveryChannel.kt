@@ -248,9 +248,7 @@ class NsdDiscoveryChannel(context: Context, messenger: BinaryMessenger) {
             if (Build.VERSION.SDK_INT >= 33 && info.network != null && info.network != network) return
             val addresses = if (modern) info.hostAddresses.mapNotNull { it.hostAddress }
                 else listOfNotNull(info.host?.hostAddress)
-            val attributes = info.attributes.entries.take(24).associate {
-                it.key.take(64) to String(it.value ?: byteArrayOf(), Charsets.UTF_8).take(256)
-            }
+            val attributes = safeNsdAttributes { info.attributes }
             emit("service", mapOf("name" to info.serviceName, "type" to info.serviceType,
                 "port" to info.port, "addresses" to addresses.take(16), "attributes" to attributes,
                 "hostname" to if (Build.VERSION.SDK_INT >= 36 ||
