@@ -39,7 +39,7 @@ class _AppShellState extends State<AppShell> {
           network: widget.network,
           scanner: widget.scanner,
         ),
-        const SavedNetworksScreen(),
+        SavedNetworksScreen(repository: widget.repository),
         SettingsScreen(
           network: widget.network,
           themeMode: widget.themeMode,

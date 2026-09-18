@@ -6,6 +6,7 @@
     <!-- API 37 groundwork; runtime requests are gated by OS AND target SDK. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <application
+        android:allowBackup="false"
         android:label="Who's on My WiFi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

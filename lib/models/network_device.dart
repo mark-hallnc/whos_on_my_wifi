@@ -45,6 +45,7 @@ class NetworkDevice {
     this.notes = '',
     this.isCurrentDevice = false,
     this.isGateway = false,
+    this.isNew = false,
     List<String> discoveryEvidence = const [],
     List<DiscoveredService> services = const [],
     List<int> openPorts = const [],
@@ -60,6 +61,47 @@ class NetworkDevice {
   final String id;
   final bool isCurrentDevice;
   final bool isGateway;
+  final bool isNew;
+
+  NetworkDevice withPresentation({
+    String? id,
+    String? customName,
+    DeviceClassification? classification,
+    String? notes,
+    bool? online,
+    bool? isNew,
+    DateTime? firstSeen,
+    List<String>? previousIpAddresses,
+  }) => NetworkDevice(
+    id: id ?? this.id,
+    ipAddress: ipAddress,
+    firstSeen: firstSeen ?? this.firstSeen,
+    lastSeen: lastSeen,
+    customName: customName ?? this.customName,
+    classification: classification ?? this.classification,
+    notes: notes ?? this.notes,
+    isOnline: online ?? isOnline,
+    isNew: isNew ?? this.isNew,
+    discoveredName: discoveredName,
+    hostname: hostname,
+    macAddress: macAddress,
+    manufacturer: reportedManufacturer,
+    macVendor: macVendor,
+    macSource: macSource,
+    modelName: modelName,
+    modelNumber: modelNumber,
+    modelDescription: modelDescription,
+    type: type,
+    confidence: confidence,
+    isGateway: isGateway,
+    isCurrentDevice: isCurrentDevice,
+    services: services,
+    upnpDescription: upnpDescription,
+    ssdpAdvertisements: ssdpAdvertisements,
+    discoveryEvidence: discoveryEvidence,
+    openPorts: openPorts,
+    previousIpAddresses: previousIpAddresses ?? this.previousIpAddresses,
+  );
   final List<String> discoveryEvidence;
   final String? customName;
   final String? hostname;

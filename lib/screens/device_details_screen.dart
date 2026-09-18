@@ -4,17 +4,63 @@ import '../models/network_info.dart';
 import '../utils/device_presentation.dart';
 import '../widgets/info_section.dart';
 import '../widgets/mock_data_banner.dart';
+import '../repositories/local_device_store.dart';
+import '../widgets/device_edit_dialog.dart';
 
-class DeviceDetailsScreen extends StatelessWidget {
+class DeviceDetailsScreen extends StatefulWidget {
   const DeviceDetailsScreen({
     super.key,
     required this.device,
     required this.network,
     this.isMock = false,
+    this.store,
+    this.historical = false,
   });
   final NetworkDevice device;
   final NetworkInfo network;
   final bool isMock;
+  final LocalDeviceStore? store;
+  final bool historical;
+
+  @override
+  State<DeviceDetailsScreen> createState() => _DeviceDetailsScreenState();
+}
+
+class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
+  late NetworkDevice device = widget.device;
+  NetworkInfo get network => widget.network;
+  bool get isMock => widget.isMock;
+  bool get editable => widget.store != null && device.id.startsWith('device:');
+
+  Future<void> edit() async {
+    final edits = await showDialog<DeviceEdits>(context:context,
+      builder:(_) => DeviceEditDialog(device:device));
+    if(edits == null || !mounted) return;
+    try {
+      await widget.store!.updateDevice(
+        device.id,
+        customName: edits.name,
+        classification: edits.classification,
+        notes: edits.notes,
+      );
+      final updated = await widget.store!.getDevice(device.id);
+      if (mounted && updated != null) {
+        setState(
+          () => device = widget.historical
+              ? updated.withPresentation(online: false, isNew: false)
+              : updated,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save device changes. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -63,9 +109,12 @@ class DeviceDetailsScreen extends StatelessWidget {
                   if (device.discoveredName != null)
                     InfoRow('Discovered name', device.discoveredName!),
                   InfoRow('Classification', device.classification.label),
-                  const Text(
-                    'Naming and classification editing will be available in a future update.',
-                  ),
+                  if (editable)
+                    TextButton.icon(
+                      onPressed: edit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit device'),
+                    ),
                 ],
               ),
               InfoSection(
@@ -159,6 +208,11 @@ class DeviceDetailsScreen extends StatelessWidget {
                 title: 'History',
                 children: [
                   InfoRow(
+                    'Known on',
+                    network.name ?? network.subnet ?? 'Saved network',
+                  ),
+                  InfoRow('Current IP', device.ipAddress),
+                  InfoRow(
                     'First seen${isMock ? ' (example)' : ''}',
                     formatTimestamp(device.firstSeen),
                   ),
@@ -183,9 +237,11 @@ class DeviceDetailsScreen extends StatelessWidget {
                         : device.notes,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Adding and editing notes is coming in a future update.',
-                  ),
+                  if (editable)
+                    TextButton(
+                      onPressed: edit,
+                      child: const Text('Edit notes'),
+                    ),
                 ],
               ),
               InfoSection(

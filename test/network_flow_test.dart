@@ -1,4 +1,5 @@
 import 'support/no_ssdp_discovery.dart';
+import 'package:whos_on_my_wifi/repositories/session_device_repository.dart';
 import 'dart:async';
 import 'package:whos_on_my_wifi/app/current_network_controller.dart';
 import 'package:whos_on_my_wifi/repositories/mock_device_repository.dart';
@@ -72,7 +73,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      WifiApp(scanner: NetworkScanner(ssdpDiscovery: const NoSsdpDiscovery())),
+      WifiApp(
+        repository: SessionDeviceRepository(),
+        scanner: NetworkScanner(ssdpDiscovery: const NoSsdpDiscovery()),
+      ),
     );
     await tester.pumpAndSettle();
   }

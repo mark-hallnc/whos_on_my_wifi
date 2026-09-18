@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:whos_on_my_wifi/repositories/session_device_repository.dart';
 import 'package:whos_on_my_wifi/repositories/mock_device_repository.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,12 +69,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const WifiApp());
+    await tester.pumpWidget(WifiApp(repository: SessionDeviceRepository()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Saved Networks').last);
     await tester.pumpAndSettle();
-    expect(find.text('A familiar place for every network'), findsOneWidget);
+    expect(find.textContaining('No saved networks yet'), findsOneWidget);
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<ThemeMode>));

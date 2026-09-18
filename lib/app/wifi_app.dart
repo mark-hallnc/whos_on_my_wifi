@@ -5,7 +5,9 @@ import '../services/network_discovery_service.dart';
 import '../services/local_network_permission_service.dart';
 import 'current_network_controller.dart';
 import '../repositories/device_repository.dart';
-import '../repositories/session_device_repository.dart';
+import '../repositories/persistent_device_repository.dart';
+import '../repositories/local_device_store.dart';
+import '../data/database/app_database.dart';
 import 'app_shell.dart';
 import 'app_theme.dart';
 
@@ -29,7 +31,7 @@ class WifiApp extends StatefulWidget {
 
 class _WifiAppState extends State<WifiApp> {
   late final DeviceRepository _repository =
-      widget.repository ?? SessionDeviceRepository();
+      widget.repository ?? PersistentDeviceRepository(AppDatabase());
   ThemeMode _themeMode = ThemeMode.system;
   late final CurrentNetworkController _network;
 
@@ -46,6 +48,9 @@ class _WifiAppState extends State<WifiApp> {
   @override
   void dispose() {
     _network.dispose();
+    if (widget.repository == null && _repository is LocalDeviceStore) {
+      unawaited(_repository.close());
+    }
     super.dispose();
   }
 

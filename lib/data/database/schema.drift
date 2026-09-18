@@ -1,0 +1,61 @@
+CREATE TABLE saved_networks (
+ id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+ stable_key TEXT NOT NULL UNIQUE,
+ name TEXT, user_name TEXT, network_address TEXT NOT NULL,
+ prefix_length INTEGER NOT NULL, gateway_address TEXT, interface_name TEXT,
+ connection_type TEXT NOT NULL,
+ first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+ last_scanned INTEGER, scan_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE stored_devices (
+ id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+ network_id INTEGER NOT NULL REFERENCES saved_networks(id),
+ identity_key TEXT NOT NULL,
+ custom_name TEXT, notes TEXT NOT NULL DEFAULT '',
+ classification TEXT NOT NULL DEFAULT 'unknown',
+ ip_address TEXT NOT NULL, mac_address TEXT, private_mac INTEGER NOT NULL DEFAULT 0,
+ discovered_name TEXT, hostname TEXT, manufacturer TEXT, mac_vendor TEXT,
+ model_name TEXT, model_number TEXT, model_description TEXT,
+ device_type TEXT NOT NULL, confidence TEXT NOT NULL,
+ is_gateway INTEGER NOT NULL, is_current_device INTEGER NOT NULL,
+ first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+ online INTEGER NOT NULL DEFAULT 0,
+ details_json TEXT NOT NULL,
+ UNIQUE(network_id, identity_key)
+);
+CREATE INDEX devices_by_network ON stored_devices(network_id);
+
+CREATE TABLE device_identities (
+ network_id INTEGER NOT NULL REFERENCES saved_networks(id),
+ identity_key TEXT NOT NULL,
+ device_id INTEGER NOT NULL REFERENCES stored_devices(id),
+ PRIMARY KEY(network_id, identity_key)
+);
+
+CREATE TABLE device_ip_history (
+ device_id INTEGER NOT NULL REFERENCES stored_devices(id),
+ ip_address TEXT NOT NULL,
+ first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+ PRIMARY KEY(device_id, ip_address)
+);
+
+CREATE TABLE device_services (
+ id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+ device_id INTEGER NOT NULL REFERENCES stored_devices(id),
+ service_key TEXT NOT NULL, service_type TEXT NOT NULL, service_name TEXT NOT NULL,
+ discovery_method TEXT NOT NULL, host TEXT, port INTEGER, transport TEXT NOT NULL,
+ first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+ details_json TEXT NOT NULL,
+ UNIQUE(device_id, service_key)
+);
+
+CREATE TABLE network_scans (
+ id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+ network_id INTEGER NOT NULL REFERENCES saved_networks(id),
+ started_at INTEGER NOT NULL, completed_at INTEGER,
+ status TEXT NOT NULL, devices_found INTEGER NOT NULL,
+ addresses_checked INTEGER NOT NULL, total_candidates INTEGER NOT NULL,
+ discovery_methods TEXT NOT NULL, message TEXT,
+ UNIQUE(network_id, started_at)
+);

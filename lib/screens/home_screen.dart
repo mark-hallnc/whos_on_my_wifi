@@ -14,6 +14,9 @@ import '../utils/device_presentation.dart';
 import '../widgets/device_card.dart';
 import '../widgets/mock_data_banner.dart';
 import 'device_details_screen.dart';
+import '../repositories/local_device_store.dart';
+import '../services/device_identity_service.dart';
+import '../services/scan_history_overlay.dart';
 
 enum _DeviceFilter { all, online, known, unknown, mine, guest }
 
@@ -37,7 +40,33 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  late Future<ScanResult> _snapshot = widget.repository.loadSnapshot();
+  late Future<ScanResult> _snapshot = _loadSnapshot();
+  List<NetworkDevice> _savedDevices = [];
+  String? _loadedKey;
+  LocalDeviceStore? get _store => widget.repository is LocalDeviceStore
+      ? widget.repository as LocalDeviceStore
+      : null;
+  Future<ScanResult> _loadSnapshot() async {
+    final network = widget.network.info;
+    final key = DeviceIdentityService.networkKey(network);
+    final result =
+        await (_store?.loadCurrentNetworkSnapshot(network) ??
+            widget.repository.loadSnapshot());
+    if (!_disposed &&
+        key == DeviceIdentityService.networkKey(widget.network.info)) {
+      _savedDevices = result.devices;
+    }
+    return result;
+  }
+
+  void _storedDataChanged() {
+    if (!mounted || _disposed || _scanBusy) return;
+    setState(() {
+      _liveResult = null;
+      _snapshot = _loadSnapshot();
+    });
+  }
+
   ScanResult? _liveResult;
   final _searchController = TextEditingController();
   _DeviceFilter _filter = _DeviceFilter.all;
@@ -55,9 +84,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.network.addListener(_networkUpdated);
+    _loadedKey = DeviceIdentityService.networkKey(widget.network.info);
+    _store?.addListener(_storedDataChanged);
   }
 
   void _networkUpdated() {
+    if (_store != null && !_scanBusy && !widget.network.isRefreshing) {
+      final key = DeviceIdentityService.networkKey(widget.network.info);
+      if (key != _loadedKey) {
+        _store?.clearPresence();
+        _loadedKey = key;
+        setState(() {
+          _savedDevices = [];
+          _liveResult = null;
+          _snapshot = _loadSnapshot();
+        });
+      }
+    }
     final initial = _scanNetworkInfo;
     if (!_scanBusy || initial == null || widget.network.isRefreshing) return;
     final reason =
@@ -84,6 +127,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state == AppLifecycleState.resumed && !_scanBusy && _store != null) {
+      _store!.clearPresence();
+      _storedDataChanged();
+    }
     // Inactive also occurs for Android permission dialogs; hidden/paused means
     // backgrounded. The shared controller refreshes on resume without scanning.
     if (state == AppLifecycleState.hidden ||
@@ -98,6 +145,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     widget.network.removeListener(_networkUpdated);
+    _store?.removeListener(_storedDataChanged);
     _cancellation?.cancel('Scan cancelled.');
     _searchController.dispose();
     super.dispose();
@@ -167,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       if (!mounted || token.isCancelled) return;
       _scanNetworkInfo = widget.network.info;
-      await _scanner.discover(
+      final completed = await _scanner.discover(
         network: _scanNetworkInfo,
         cancellation: token,
         verifyNetwork: (initial) async {
@@ -183,13 +231,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   : 'Local network permission unavailable. Scan stopped.');
         },
         onProgress: (result) {
-          if (mounted && !_disposed) setState(() => _liveResult = result);
+          if (mounted && !_disposed) {
+            setState(
+              () => _liveResult = _store == null
+                  ? result
+                  : ScanHistoryOverlay.merge(result, _savedDevices),
+            );
+          }
         },
       );
+      if (_store != null && !_disposed) {
+        try {
+          final saved = await _store!.saveScan(completed);
+          if (mounted && !_disposed) {
+            setState(() {
+              _liveResult = saved;
+              _savedDevices = saved.devices;
+            });
+          }
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Scan finished, but history could not be saved. Please try again.',
+                ),
+              ),
+            );
+          }
+        }
+      }
     } finally {
       _scanNetworkInfo = null;
       _cancellation = null;
       if (mounted && !_disposed) setState(() => _scanBusy = false);
+      if (mounted && !_disposed && _store != null) _networkUpdated();
     }
   }
 
@@ -202,6 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
           child: FutureBuilder<ScanResult>(
+            key: ValueKey(_loadedKey),
             future: _snapshot,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
@@ -212,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const Text('Could not load devices.'),
                       TextButton(
                         onPressed: () => setState(() {
-                          _snapshot = widget.repository.loadSnapshot();
+                          _snapshot = _loadSnapshot();
                         }),
                         child: const Text('Try again'),
                       ),
@@ -374,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 device: devices[index],
                                 network: result.network,
                                 isMock: result.isMock,
+                                store: _store,
                               ),
                             ),
                           ),

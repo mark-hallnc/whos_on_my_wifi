@@ -24,6 +24,7 @@ class ScanResult {
     this.totalCandidates = 0,
     this.addressesChecked = 0,
     this.message,
+    this.foundCount,
     List<String> discoveryMethods = const [],
     List<String> limitations = const [],
   }) : devices = List.unmodifiable(devices),
@@ -47,6 +48,7 @@ class ScanResult {
     addressesChecked: resetProgress ? 0 : addressesChecked,
     discoveryMethods: discoveryMethods,
     limitations: limitations,
+    foundCount: resetProgress ? null : foundCount,
   );
 
   final NetworkInfo network;
@@ -54,7 +56,8 @@ class ScanResult {
   final int totalCandidates;
   final int addressesChecked;
   final String? message;
-  int get devicesFound => devices.length;
+  final int? foundCount;
+  int get devicesFound => foundCount ?? devices.length;
   final List<NetworkDevice> devices;
   final DateTime? startedAt;
   final DateTime? completedAt;
