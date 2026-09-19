@@ -56,6 +56,15 @@ class DeviceCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 6,
                       children: [
+                        if (device.isNew)
+                          Semantics(
+                            label: 'First discovered in the latest scan',
+                            child: _StatusLabel(
+                              label: 'NEW',
+                              foreground: colors.onTertiaryContainer,
+                              background: colors.tertiaryContainer,
+                            ),
+                          ),
                         _StatusLabel(
                           label: device.isOnline ? 'Online' : 'Offline',
                           icon: device.isOnline

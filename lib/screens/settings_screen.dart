@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../app/current_network_controller.dart';
 import 'network_information_screen.dart';
 import '../widgets/info_section.dart';
+import '../services/new_device_notification_service.dart';
+import '../widgets/notification_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -9,10 +11,12 @@ class SettingsScreen extends StatelessWidget {
     required this.themeMode,
     required this.network,
     required this.onThemeChanged,
+    this.notifications,
   });
   final ThemeMode themeMode;
   final CurrentNetworkController network;
   final ValueChanged<ThemeMode> onThemeChanged;
+  final NewDeviceNotificationService? notifications;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -24,6 +28,8 @@ class SettingsScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (notifications != null)
+              NotificationSettings(service: notifications!),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.wifi_rounded),

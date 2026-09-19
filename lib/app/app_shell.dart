@@ -5,12 +5,14 @@ import '../repositories/device_repository.dart';
 import '../screens/home_screen.dart';
 import '../screens/saved_networks_screen.dart';
 import '../screens/settings_screen.dart';
+import '../services/new_device_notification_service.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.repository,
     this.scanner,
+    this.notifications,
     required this.network,
     required this.themeMode,
     required this.onThemeChanged,
@@ -18,6 +20,7 @@ class AppShell extends StatefulWidget {
 
   final DeviceRepository repository;
   final NetworkDiscoveryService? scanner;
+  final NewDeviceNotificationService? notifications;
   final CurrentNetworkController network;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
@@ -28,6 +31,30 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  int _tapRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tapRevision = widget.notifications?.tapRevision ?? 0;
+    widget.notifications?.addListener(_notificationChanged);
+  }
+
+  void _notificationChanged() {
+    final revision = widget.notifications?.tapRevision ?? 0;
+    if (revision == _tapRevision || !mounted) return;
+    _tapRevision = revision;
+    // Opening the existing Devices tab is intentional: no brittle deep links
+    // and no automatic scan is started by tapping a notification.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() => _selectedIndex = 0);
+  }
+
+  @override
+  void dispose() {
+    widget.notifications?.removeListener(_notificationChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -38,9 +65,11 @@ class _AppShellState extends State<AppShell> {
           repository: widget.repository,
           network: widget.network,
           scanner: widget.scanner,
+          notifications: widget.notifications,
         ),
         SavedNetworksScreen(repository: widget.repository),
         SettingsScreen(
+          notifications: widget.notifications,
           network: widget.network,
           themeMode: widget.themeMode,
           onThemeChanged: widget.onThemeChanged,

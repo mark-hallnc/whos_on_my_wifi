@@ -7,6 +7,7 @@ import '../models/network_device.dart';
 import '../models/network_info.dart';
 import '../models/saved_network.dart';
 import '../models/scan_result.dart';
+import '../models/scan_reconciliation.dart';
 import '../services/device_identity_service.dart';
 import 'local_device_store.dart';
 
@@ -247,8 +248,12 @@ class PersistentDeviceRepository extends LocalDeviceStore {
     }
     var networkId = 0;
     var duplicate = false;
+    var baseline = false;
     final seen = <int>{};
     final inserted = <int>{};
+    final matched = <int>{};
+    final offline = <int>{};
+    final external = <int>{};
     await database.transaction(() async {
       final now = _time(result.completedAt ?? DateTime.now());
       final start = _time(result.startedAt!);
@@ -280,6 +285,10 @@ class PersistentDeviceRepository extends LocalDeviceStore {
         duplicate = true;
         return;
       }
+      // last_scanned survives scan-history pruning and is set only on success.
+      baseline =
+          result.state == ScanState.completed &&
+          (existing.isEmpty || existing.single['last_scanned'] == null);
       await database.customStatement(
         '''UPDATE saved_networks SET last_seen=MAX(last_seen,?),
         first_seen=MIN(first_seen,?), scan_count=scan_count+1,
@@ -400,7 +409,13 @@ class PersistentDeviceRepository extends LocalDeviceStore {
           inserted.add(id);
         } else {
           id = _id(old.id);
+          if (!inserted.contains(id)) matched.add(id);
           await _update('stored_devices', id, fields);
+        }
+        if (!fresh.isCurrentDevice) {
+          external.add(id);
+        } else {
+          external.remove(id);
         }
         seen.add(id);
         for (final alias in available) {
@@ -460,6 +475,15 @@ class PersistentDeviceRepository extends LocalDeviceStore {
         );
       }
       if (result.state == ScanState.completed) {
+        final previouslyOnline = await _rows(
+          'SELECT id FROM stored_devices WHERE network_id=? AND online=1',
+          [networkId],
+        );
+        offline.addAll(
+          previouslyOnline
+              .map((r) => r['id'] as int)
+              .where((id) => !seen.contains(id)),
+        );
         await database.customStatement(
           'UPDATE stored_devices SET online=0 WHERE network_id=?${seen.isEmpty ? '' : ' AND id NOT IN (${List.filled(seen.length, '?').join(',')})'}',
           [networkId, ...seen],
@@ -479,21 +503,26 @@ class PersistentDeviceRepository extends LocalDeviceStore {
           result.discoveryMethods.take(16).toList(),
         ),
         'message': result.message?.substring(
-                0,
-                result.message!.length.clamp(0, 512),
-              ),
+          0,
+          result.message!.length.clamp(0, 512),
+        ),
       });
       await database.customStatement(
         'DELETE FROM network_scans WHERE network_id=? AND id NOT IN (SELECT id FROM network_scans WHERE network_id=? ORDER BY started_at DESC,id DESC LIMIT 100)',
         [networkId, networkId],
       );
     });
+    final newIds =
+        result.state == ScanState.completed && !baseline && !duplicate
+        ? inserted.intersection(external)
+        : <int>{};
     if (!duplicate) {
       if (result.state == ScanState.completed) {
         _online[networkId] = seen;
-        _new[networkId] = inserted;
+        _new[networkId] = newIds;
       } else {
         (_online[networkId] ??= {}).addAll(seen);
+        _new.remove(networkId);
       }
     }
     final devices = await _devices(networkId, live: true);
@@ -510,6 +539,18 @@ class PersistentDeviceRepository extends LocalDeviceStore {
       discoveryMethods: result.discoveryMethods,
       limitations: result.limitations,
       foundCount: result.devicesFound,
+      reconciliation: ScanReconciliation(
+        networkId: networkId,
+        scanKey: '$networkId:${_time(result.startedAt!)}',
+        isBaseline: baseline,
+        isSuccessful: result.state == ScanState.completed,
+        isDuplicate: duplicate,
+        insertedDeviceIds: {for (final id in inserted) 'device:$id'},
+        matchedDeviceIds: {for (final id in matched) 'device:$id'},
+        updatedDeviceIds: {for (final id in matched) 'device:$id'},
+        offlineDeviceIds: {for (final id in offline) 'device:$id'},
+        newDeviceIds: {for (final id in newIds) 'device:$id'},
+      ),
     );
   }
 
@@ -536,11 +577,14 @@ class PersistentDeviceRepository extends LocalDeviceStore {
   );
 
   @override
-  void clearPresence() { _online.clear(); _new.clear(); }
+  void clearPresence() {
+    _online.clear();
+    _new.clear();
+  }
 
   @override
   Future<void> close() async {
-    if(_closed) return;
+    if (_closed) return;
     _closed = true;
     dispose();
     await database.close();

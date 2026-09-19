@@ -33,9 +33,11 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
   bool get editable => widget.store != null && device.id.startsWith('device:');
 
   Future<void> edit() async {
-    final edits = await showDialog<DeviceEdits>(context:context,
-      builder:(_) => DeviceEditDialog(device:device));
-    if(edits == null || !mounted) return;
+    final edits = await showDialog<DeviceEdits>(
+      context: context,
+      builder: (_) => DeviceEditDialog(device: device),
+    );
+    if (edits == null || !mounted) return;
     try {
       await widget.store!.updateDevice(
         device.id,
@@ -90,6 +92,11 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 6),
+              if (device.isNew && !widget.historical)
+                const Text(
+                  'First discovered in the latest scan',
+                  textAlign: TextAlign.center,
+                ),
               Text(
                 '${device.isOnline ? 'Online' : 'Offline'} • ${device.classification.label}',
                 textAlign: TextAlign.center,

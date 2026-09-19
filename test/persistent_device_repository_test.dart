@@ -113,7 +113,7 @@ void main() {
     'same device preserves earliest firstSeen and updates lastSeen; new flag expires next scan',
     () async {
       final a = await repo.saveScan(scan([observed()]));
-      expect(a.devices.single.isNew, isTrue);
+      expect(a.devices.single.isNew, isFalse); // First success is the baseline.
       final b = await repo.saveScan(scan([observed(minute: 5)], minute: 5));
       expect(b.devices.single.id, a.devices.single.id);
       expect(b.devices.single.firstSeen, start);

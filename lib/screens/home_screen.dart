@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../services/new_device_notification_service.dart';
 import '../services/network_scanner.dart';
 import '../utils/network_presentation.dart';
 import '../services/network_discovery_service.dart';
@@ -28,10 +30,12 @@ class HomeScreen extends StatefulWidget {
     required this.repository,
     required this.network,
     this.scanner,
+    this.notifications,
     this.showAdBanner = true,
   });
   final bool showAdBanner;
   final NetworkDiscoveryService? scanner;
+  final NewDeviceNotificationService? notifications;
   final DeviceRepository repository;
   final CurrentNetworkController network;
 
@@ -127,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state == AppLifecycleState.resumed && !_scanBusy && _store != null) {
+    if (state == AppLifecycleState.resumed && !_scanBusy && _store != null) {
       _store!.clearPresence();
       _storedDataChanged();
     }
@@ -242,12 +246,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       if (_store != null && !_disposed) {
         try {
-          final saved = await _store!.saveScan(completed);
+          final saved = await _store!.saveScan(
+            token.isCancelled
+                ? completed.withState(
+                    ScanState.cancelled,
+                    message: token.reason,
+                  )
+                : completed,
+          );
           if (mounted && !_disposed) {
             setState(() {
               _liveResult = saved;
               _savedDevices = saved.devices;
             });
+            final outcome = saved.reconciliation;
+            if (!token.isCancelled &&
+                saved.state == ScanState.completed &&
+                outcome != null &&
+                !outcome.isDuplicate) {
+              final count = outcome.newDeviceIds.length;
+              final summary = outcome.isBaseline
+                  ? 'Network baseline created with ${saved.devicesFound} devices'
+                  : count > 0
+                  ? '$count new ${count == 1 ? 'device' : 'devices'} found'
+                  : null;
+              if (summary != null) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(summary)));
+              }
+              final notifications = widget.notifications;
+              if (notifications != null) {
+                unawaited(notifications.notifyCompletedScan(saved));
+              }
+            }
           }
         } catch (_) {
           if (mounted) {

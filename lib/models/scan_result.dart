@@ -1,5 +1,6 @@
 import 'network_device.dart';
 import 'network_info.dart';
+import 'scan_reconciliation.dart';
 
 enum ScanState {
   idle,
@@ -25,6 +26,7 @@ class ScanResult {
     this.addressesChecked = 0,
     this.message,
     this.foundCount,
+    this.reconciliation,
     List<String> discoveryMethods = const [],
     List<String> limitations = const [],
   }) : devices = List.unmodifiable(devices),
@@ -52,6 +54,7 @@ class ScanResult {
   );
 
   final NetworkInfo network;
+  final ScanReconciliation? reconciliation;
   final ScanState state;
   final int totalCandidates;
   final int addressesChecked;

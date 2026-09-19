@@ -10,18 +10,21 @@ import '../repositories/local_device_store.dart';
 import '../data/database/app_database.dart';
 import 'app_shell.dart';
 import 'app_theme.dart';
+import '../services/new_device_notification_service.dart';
 
 class WifiApp extends StatefulWidget {
   const WifiApp({
     super.key,
     this.repository,
     this.scanner,
+    this.notifications,
     this.networkInfoService = const NetworkInfoService(),
     this.permissionService = const LocalNetworkPermissionService(),
   });
 
   final DeviceRepository? repository;
   final NetworkDiscoveryService? scanner;
+  final NewDeviceNotificationService? notifications;
   final NetworkInfoService networkInfoService;
   final LocalNetworkPermissionService permissionService;
 
@@ -34,6 +37,8 @@ class _WifiAppState extends State<WifiApp> {
       widget.repository ?? PersistentDeviceRepository(AppDatabase());
   ThemeMode _themeMode = ThemeMode.system;
   late final CurrentNetworkController _network;
+  late final NewDeviceNotificationService _notifications =
+      widget.notifications ?? NewDeviceNotificationService();
 
   @override
   void initState() {
@@ -43,11 +48,13 @@ class _WifiAppState extends State<WifiApp> {
       permissions: widget.permissionService,
     );
     unawaited(_network.refresh());
+    unawaited(_notifications.initialize());
   }
 
   @override
   void dispose() {
     _network.dispose();
+    if (widget.notifications == null) _notifications.dispose();
     if (widget.repository == null && _repository is LocalDeviceStore) {
       unawaited(_repository.close());
     }
@@ -63,6 +70,7 @@ class _WifiAppState extends State<WifiApp> {
     themeMode: _themeMode,
     home: AppShell(
       network: _network,
+      notifications: _notifications,
       scanner: widget.scanner,
       repository: _repository,
       themeMode: _themeMode,
