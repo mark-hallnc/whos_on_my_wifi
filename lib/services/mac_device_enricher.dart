@@ -1,6 +1,7 @@
 import '../models/network_device.dart';
 import 'neighbor_table_service.dart';
 import 'vendor_lookup_service.dart';
+import 'device_identification_service.dart';
 
 class MacDeviceEnricher {
   static void merge(
@@ -13,10 +14,12 @@ class MacDeviceEnricher {
       if (old == null) {
         continue; // A cached neighbor is not proof of online status.
       }
-      devices[observation.ip] = old.withMac(
-        observation.mac,
-        observation.source,
-        vendors.lookup(observation.mac.value),
+      devices[observation.ip] = DeviceIdentificationService.identify(
+        old.withMac(
+          observation.mac,
+          observation.source,
+          vendors.lookup(observation.mac.value),
+        ),
       );
     }
   }

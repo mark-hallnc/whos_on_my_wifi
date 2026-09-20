@@ -3,9 +3,9 @@ import '../models/network_device.dart';
 
 extension DeviceTypePresentation on DeviceType {
   String get label => switch (this) {
-    DeviceType.phone => 'Android phone',
-    DeviceType.computer => 'Windows PC',
-    DeviceType.television => 'Smart TV',
+    DeviceType.phone => 'Phone',
+    DeviceType.computer => 'Computer',
+    DeviceType.television => 'Television',
     DeviceType.thermostat => 'Thermostat',
     DeviceType.printer => 'Printer',
     DeviceType.router => 'Router',
@@ -26,6 +26,32 @@ extension DeviceTypePresentation on DeviceType {
     DeviceType.mediaDevice => Icons.cast_rounded,
     DeviceType.camera => Icons.videocam_rounded,
     DeviceType.unknown => Icons.devices_other_rounded,
+  };
+}
+
+extension DeviceIdentityPresentation on NetworkDevice {
+  String get identitySummary {
+    final parts = <String>[];
+    final vendor = manufacturer;
+    final model = modelName?.trim();
+    final usefulModel =
+        model != null && model.isNotEmpty && model != displayName;
+    if (vendor != null &&
+        (!usefulModel || !model.toLowerCase().startsWith(vendor.toLowerCase()))) {
+      parts.add(vendor);
+    }
+    if (usefulModel) parts.add(model);
+    if (type != DeviceType.unknown) parts.add(type.label);
+    return parts.join(' • ');
+  }
+
+  String get confidenceExplanation => switch (confidence) {
+    IdentificationConfidence.low =>
+      'Only limited network information is available.',
+    IdentificationConfidence.medium =>
+      'Identification is based on network services or combined identity clues.',
+    IdentificationConfidence.high =>
+      'Strong device metadata or independent discovery sources support this identity.',
   };
 }
 

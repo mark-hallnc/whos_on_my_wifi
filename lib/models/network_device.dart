@@ -1,6 +1,7 @@
 import 'discovered_service.dart';
 import 'upnp_description.dart';
 import 'mac_address.dart';
+import '../utils/identity_text.dart';
 
 enum DeviceType {
   phone,
@@ -50,7 +51,11 @@ class NetworkDevice {
     List<DiscoveredService> services = const [],
     List<int> openPorts = const [],
     List<String> previousIpAddresses = const [],
+    Map<String, int> identificationQuality = const {},
+    List<String> identificationNotes = const [],
   }) : macAddress = MacAddress.parse(macAddress)?.value,
+       identificationQuality = Map.unmodifiable(identificationQuality),
+       identificationNotes = List.unmodifiable(identificationNotes),
        reportedManufacturer = manufacturer,
        ssdpAdvertisements = List.unmodifiable(ssdpAdvertisements),
        discoveryEvidence = List.unmodifiable(discoveryEvidence),
@@ -62,6 +67,10 @@ class NetworkDevice {
   final bool isCurrentDevice;
   final bool isGateway;
   final bool isNew;
+
+  /// Internal per-field evidence strength, persisted in the bounded details JSON.
+  final Map<String, int> identificationQuality;
+  final List<String> identificationNotes;
 
   NetworkDevice withPresentation({
     String? id,
@@ -83,6 +92,8 @@ class NetworkDevice {
     isOnline: online ?? isOnline,
     isNew: isNew ?? this.isNew,
     discoveredName: discoveredName,
+    identificationQuality: identificationQuality,
+    identificationNotes: identificationNotes,
     hostname: hostname,
     macAddress: macAddress,
     manufacturer: reportedManufacturer,
@@ -119,7 +130,9 @@ class NetworkDevice {
   bool get isPrivateMac =>
       MacAddress.parse(macAddress)?.isLocallyAdministered ?? false;
   String? get manufacturer =>
-      reportedManufacturer ?? (isPrivateMac ? null : macVendor);
+      IdentityText.manufacturer(reportedManufacturer) ??
+      (isPrivateMac ? null : IdentityText.manufacturer(macVendor));
+  String? get normalizedHostname => IdentityText.name(hostname);
   final DeviceType type;
   final bool isOnline;
   final DeviceClassification classification;
@@ -141,6 +154,9 @@ class NetworkDevice {
         customName: customName,
         hostname: hostname,
         discoveredName: discoveredName,
+        identificationQuality: identificationQuality,
+        identificationNotes: identificationNotes,
+        isNew: isNew,
         modelName: modelName,
         modelNumber: modelNumber,
         modelDescription: modelDescription,
@@ -170,10 +186,8 @@ class NetworkDevice {
     if (isCurrentDevice) return 'This device';
     if (isGateway) return 'Router / Gateway';
     if (customName?.trim().isNotEmpty ?? false) return customName!.trim();
-    if (discoveredName?.trim().isNotEmpty ?? false) {
-      return discoveredName!.trim();
-    }
-    if (hostname?.trim().isNotEmpty ?? false) return hostname!.trim();
+    final name = IdentityText.name(discoveredName) ?? normalizedHostname;
+    if (name != null) return name;
     return 'Unknown device';
   }
 }

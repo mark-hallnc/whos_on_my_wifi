@@ -3,6 +3,8 @@ import '../models/discovered_service.dart';
 import '../models/network_device.dart';
 import '../models/network_info.dart';
 import '../utils/ipv4_subnet.dart';
+import '../utils/identity_text.dart';
+import 'device_identification_service.dart';
 
 /// Parses untrusted LAN metadata without reverse DNS or additional traffic.
 class ResolvedLocalService {
@@ -80,25 +82,12 @@ class ResolvedLocalService {
       type: type,
       port: port,
       addresses: List.unmodifiable(addresses),
-      hostname: raw['hostname'] is String
-          ? usefulName(raw['hostname'] as String)
-          : null,
+      hostname: raw['hostname'] is String ? raw['hostname'] as String : null,
       attributes: Map.unmodifiable(attributes),
     );
   }
 
-  static String? usefulName(String? value) {
-    final name = value?.trim();
-    if (name == null || name.isEmpty || name.length > 255) return null;
-    final lower = name.toLowerCase().replaceFirst(RegExp(r'\.local\.?$'), '');
-    if (['localhost', 'android', 'unknown', 'unknown device'].contains(lower) ||
-        lower.startsWith('_') ||
-        InternetAddress.tryParse(lower) != null ||
-        RegExp(r'^[0-9.:-]+$').hasMatch(lower)) {
-      return null;
-    }
-    return name;
-  }
+  static String? usefulName(String? value) => IdentityText.name(value);
 }
 
 /// Only local usable IPv4 hosts become rows; IPv6 remains service metadata.
@@ -161,59 +150,38 @@ class ServiceDeviceMerger {
           ...service.attributes,
         }),
       );
-      final hostname =
-          ResolvedLocalService.usefulName(old?.hostname) ??
-          ResolvedLocalService.usefulName(found.hostname) ??
-          ResolvedLocalService.usefulName(found.name);
-      final printer = services.values.any(
-        (s) => ['_ipp._tcp.', '_ipps._tcp.', '_printer._tcp.'].contains(s.type),
-      );
-      // Cast, AirPlay, SMB and workstation advertise capabilities, not hardware.
-      final type = old != null && old.type != DeviceType.unknown
-          ? old.type
-          : (printer ? DeviceType.printer : DeviceType.unknown);
-      final hint = hostname == null
-          ? IdentificationConfidence.low
-          : (printer
-                ? IdentificationConfidence.high
-                : IdentificationConfidence.medium);
-      final confidence = old != null && old.confidence.index > hint.index
-          ? old.confidence
-          : hint;
-      devices[ip] = NetworkDevice(
-        id: old?.id ?? ip,
-        ipAddress: ip,
-        firstSeen: old == null || now.isBefore(old.firstSeen)
-            ? now
-            : old.firstSeen,
-        lastSeen: old != null && old.lastSeen.isAfter(now) ? old.lastSeen : now,
-        customName: old?.customName,
-        discoveredName: old?.discoveredName,
-        modelName: old?.modelName,
-        modelNumber: old?.modelNumber,
-        modelDescription: old?.modelDescription,
-        upnpDescription: old?.upnpDescription,
-        ssdpAdvertisements: old?.ssdpAdvertisements ?? [],
-        hostname: hostname ?? old?.hostname,
-        macAddress: old?.macAddress,
-        manufacturer: old?.reportedManufacturer,
-        macVendor: old?.macVendor,
-        macSource: old?.macSource,
-        type: type,
-        confidence: confidence,
-        isOnline: true,
-        classification: old?.classification ?? DeviceClassification.unknown,
-        notes: old?.notes ?? '',
-        previousIpAddresses: old?.previousIpAddresses ?? [],
-        isCurrentDevice: old?.isCurrentDevice ?? ip == local,
-        isGateway: old?.isGateway ?? ip == network.gatewayAddress,
-        services: services.values.toList(),
-        openPorts: {...?old?.openPorts, found.port}.toList()..sort(),
-        discoveryEvidence: {
-          ...?old?.discoveryEvidence,
-          'Discovered via mDNS / Android NSD',
-          'Advertises ${found.type}',
-        }.toList(),
+      devices[ip] = DeviceIdentificationService.identify(
+        NetworkDevice(
+          id: old?.id ?? ip,
+          ipAddress: ip,
+          firstSeen: old == null || now.isBefore(old.firstSeen)
+              ? now
+              : old.firstSeen,
+          lastSeen: old != null && old.lastSeen.isAfter(now)
+              ? old.lastSeen
+              : now,
+          customName: old?.customName,
+          upnpDescription: old?.upnpDescription,
+          ssdpAdvertisements: old?.ssdpAdvertisements ?? [],
+          hostname: old?.hostname ?? found.hostname,
+          macAddress: old?.macAddress,
+          macVendor: old?.macVendor,
+          macSource: old?.macSource,
+          isOnline: true,
+          classification: old?.classification ?? DeviceClassification.unknown,
+          notes: old?.notes ?? '',
+          previousIpAddresses: old?.previousIpAddresses ?? [],
+          isCurrentDevice: old?.isCurrentDevice ?? ip == local,
+          isGateway: old?.isGateway ?? ip == network.gatewayAddress,
+          services: services.values.toList(),
+          openPorts: {...?old?.openPorts, found.port}.toList()..sort(),
+          discoveryEvidence: {
+            ...?old?.discoveryEvidence,
+            'Discovered via mDNS / Android NSD',
+            'Advertises ${found.type}',
+          }.toList(),
+        ),
+        previous: old,
       );
     }
   }

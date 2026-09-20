@@ -41,15 +41,17 @@ class DeviceCard extends StatelessWidget {
                       device.displayName,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    if (device.identitySummary.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        device.identitySummary,
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       device.ipAddress,
                       style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${device.manufacturer ?? 'Vendor unavailable'} • ${device.type.label}',
-                      style: TextStyle(color: colors.onSurfaceVariant),
                     ),
                     const SizedBox(height: 10),
                     Wrap(

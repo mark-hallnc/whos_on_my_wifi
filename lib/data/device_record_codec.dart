@@ -26,6 +26,8 @@ class DeviceRecordCodec {
         .toList(),
     'ports': d.openPorts.toSet().take(128).toList(),
     'macSource': d.macSource,
+    'identificationQuality': d.identificationQuality,
+    'identificationNotes': d.identificationNotes.take(8).toList(),
     'upnp': d.upnpDescription?.fields,
     'ads': d.ssdpAdvertisements.take(8).map((a) => a.headers).toList(),
   });
@@ -71,6 +73,19 @@ class DeviceRecordCodec {
         DeviceClassification.unknown,
       ),
       discoveredName: r['discovered_name'] as String?,
+      identificationQuality: {
+        if (extra['identificationQuality'] case final Map quality)
+          for (final key in [
+            'name',
+            'manufacturer',
+            'model',
+            'modelNumber',
+            'modelDescription',
+            'type',
+          ])
+            if (quality[key] is int) key: (quality[key] as int).clamp(0, 100),
+      },
+      identificationNotes: list(extra['identificationNotes']),
       hostname: r['hostname'] as String?,
       macAddress: r['mac_address'] as String?,
       macVendor: r['mac_vendor'] as String?,

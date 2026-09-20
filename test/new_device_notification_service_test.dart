@@ -241,7 +241,7 @@ void main() {
     );
     expect(
       NewDeviceNotificationService.identityLabel(device(hostname: 'tv.local')),
-      'tv.local',
+      'tv',
     );
     expect(
       NewDeviceNotificationService.identityLabel(device(vendor: 'Samsung')),

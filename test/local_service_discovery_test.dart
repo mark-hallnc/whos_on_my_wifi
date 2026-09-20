@@ -26,7 +26,7 @@ Map<String, Object> service({
   'type': type,
   'port': port,
   'addresses': addresses,
-  'attributes': {'model': 'advertised value'},
+  'attributes': <String, String>{},
 };
 
 void main() {
@@ -117,7 +117,7 @@ void main() {
     expect(result.services.single.discoveryMethod, 'mDNS / Android NSD');
     expect(result.services.single.label, 'Google Cast');
     expect(result.openPorts, [8009]);
-    expect(result.type, DeviceType.unknown);
+    expect(result.type, DeviceType.mediaDevice);
     expect(result.confidence, IdentificationConfidence.medium);
   });
 
@@ -136,13 +136,17 @@ void main() {
       ].contains(type);
       expect(
         devices.values.single.type,
-        printer ? DeviceType.printer : DeviceType.unknown,
+        printer ? DeviceType.printer : switch (type) {
+          '_googlecast._tcp.' => DeviceType.mediaDevice,
+          '_workstation._tcp.' => DeviceType.computer,
+          _ => DeviceType.unknown,
+        },
       );
       expect(
         devices.values.single.confidence,
-        printer
-            ? IdentificationConfidence.high
-            : IdentificationConfidence.medium,
+        printer || ['_googlecast._tcp.', '_airplay._tcp.', '_raop._tcp.', '_workstation._tcp.'].contains(type)
+            ? IdentificationConfidence.medium
+            : IdentificationConfidence.low,
       );
     }
   });
@@ -241,7 +245,8 @@ void main() {
       final result = await pending;
       expect(result.state, ScanState.completed);
       expect(result.devices.length, 2);
-      expect(result.devices.last.hostname, 'Living Room');
+      expect(result.devices.last.discoveredName, 'Living Room');
+      expect(result.devices.last.hostname, isNull);
       expect(result.devices.last.services.length, 1);
       expect(stops, 1);
     },

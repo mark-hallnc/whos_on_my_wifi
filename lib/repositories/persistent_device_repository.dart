@@ -9,6 +9,7 @@ import '../models/saved_network.dart';
 import '../models/scan_result.dart';
 import '../models/scan_reconciliation.dart';
 import '../services/device_identity_service.dart';
+import '../services/device_identification_service.dart';
 import 'local_device_store.dart';
 
 class PersistentDeviceRepository extends LocalDeviceStore {
@@ -165,12 +166,14 @@ class PersistentDeviceRepository extends LocalDeviceStore {
     }
     return rows.map((r) {
       final id = r['id'] as int;
-      return DeviceRecordCodec.device(
-        r,
-        serviceMap[id] ?? [],
-        (ipMap[id] ?? []).where((ip) => ip != r['ip_address']).toList(),
-        online: live && (_online[networkId]?.contains(id) ?? false),
-        isNew: live && (_new[networkId]?.contains(id) ?? false),
+      return DeviceIdentificationService.identify(
+        DeviceRecordCodec.device(
+          r,
+          serviceMap[id] ?? [],
+          (ipMap[id] ?? []).where((ip) => ip != r['ip_address']).toList(),
+          online: live && (_online[networkId]?.contains(id) ?? false),
+          isNew: live && (_new[networkId]?.contains(id) ?? false),
+        ),
       );
     }).toList();
   }
@@ -360,6 +363,10 @@ class PersistentDeviceRepository extends LocalDeviceStore {
                         [_id(old.id)],
                       )).single['identity_key']
                       as String);
+        final identified = DeviceIdentificationService.identify(
+          fresh,
+          previous: old,
+        );
         final fields = <String, Object?>{
           'identity_key': identity,
           'ip_address': fresh.ipAddress,
@@ -370,23 +377,15 @@ class PersistentDeviceRepository extends LocalDeviceStore {
                   : fresh.isPrivateMac)
               ? 1
               : 0,
-          'hostname': fresh.hostname ?? old?.hostname,
-          'discovered_name': fresh.discoveredName ?? old?.discoveredName,
-          'manufacturer':
-              fresh.reportedManufacturer ?? old?.reportedManufacturer,
-          'mac_vendor': fresh.macAddress != null
-              ? fresh.macVendor
-              : old?.macVendor,
-          'model_name': fresh.modelName ?? old?.modelName,
-          'model_number': fresh.modelNumber ?? old?.modelNumber,
-          'model_description': fresh.modelDescription ?? old?.modelDescription,
-          'device_type': old != null && old.type != DeviceType.unknown
-              ? old.type.name
-              : fresh.type.name,
-          'confidence':
-              old != null && old.confidence.index > fresh.confidence.index
-              ? old.confidence.name
-              : fresh.confidence.name,
+          'hostname': identified.hostname,
+          'discovered_name': identified.discoveredName,
+          'manufacturer': identified.reportedManufacturer,
+          'mac_vendor': identified.macVendor,
+          'model_name': identified.modelName,
+          'model_number': identified.modelNumber,
+          'model_description': identified.modelDescription,
+          'device_type': identified.type.name,
+          'confidence': identified.confidence.name,
           'is_gateway': fresh.isGateway ? 1 : 0,
           'is_current_device': fresh.isCurrentDevice ? 1 : 0,
           'first_seen': old != null && old.firstSeen.isBefore(fresh.firstSeen)
@@ -396,9 +395,7 @@ class PersistentDeviceRepository extends LocalDeviceStore {
               ? _time(old.lastSeen)
               : _time(fresh.lastSeen),
           'online': 1,
-          'details_json': DeviceRecordCodec.details(
-            _retainProtocolIdentity(fresh, old),
-          ),
+          'details_json': DeviceRecordCodec.details(identified),
         };
         final int id;
         if (old == null) {
@@ -559,22 +556,6 @@ class PersistentDeviceRepository extends LocalDeviceStore {
       : key.startsWith('udn:')
       ? 1
       : 2;
-  static NetworkDevice _retainProtocolIdentity(
-    NetworkDevice fresh,
-    NetworkDevice? old,
-  ) => NetworkDevice(
-    id: fresh.id,
-    ipAddress: fresh.ipAddress,
-    firstSeen: fresh.firstSeen,
-    lastSeen: fresh.lastSeen,
-    discoveryEvidence: fresh.discoveryEvidence,
-    openPorts: {...?old?.openPorts, ...fresh.openPorts}.toList(),
-    macSource: fresh.macSource ?? old?.macSource,
-    upnpDescription: fresh.upnpDescription ?? old?.upnpDescription,
-    ssdpAdvertisements: fresh.ssdpAdvertisements.isEmpty
-        ? old?.ssdpAdvertisements ?? []
-        : fresh.ssdpAdvertisements,
-  );
 
   @override
   void clearPresence() {

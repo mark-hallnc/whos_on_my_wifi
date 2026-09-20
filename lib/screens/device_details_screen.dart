@@ -105,15 +105,13 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
               InfoSection(
                 title: 'Identity',
                 children: [
-                  InfoRow(
-                    'Friendly name',
-                    device.customName ?? 'No custom name',
-                  ),
-                  InfoRow(
-                    'Discovered hostname',
-                    device.hostname ?? 'Unavailable',
-                  ),
-                  if (device.discoveredName != null)
+                  InfoRow('Name', device.displayName),
+                  if (device.customName != null)
+                    InfoRow('Custom name', device.customName!),
+                  if (device.normalizedHostname != null)
+                    InfoRow('Hostname', device.normalizedHostname!),
+                  if (device.discoveredName != null &&
+                      device.discoveredName != device.displayName)
                     InfoRow('Discovered name', device.discoveredName!),
                   InfoRow('Classification', device.classification.label),
                   if (editable)
@@ -161,25 +159,20 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
               InfoSection(
                 title: 'Device identification',
                 children: [
-                  InfoRow(
-                    'Manufacturer / vendor',
-                    device.manufacturer ?? 'Unavailable',
-                  ),
+                  InfoRow('Manufacturer', device.manufacturer ?? 'Unknown'),
                   if (device.modelName != null)
                     InfoRow('Model', device.modelName!),
                   if (device.modelNumber != null)
                     InfoRow('Model number', device.modelNumber!),
                   if (device.modelDescription != null)
                     InfoRow('Model description', device.modelDescription!),
-                  InfoRow('Likely device type', device.type.label),
+                  InfoRow('Device type', device.type.label),
                   InfoRow('Confidence', switch (device.confidence) {
                     IdentificationConfidence.low => 'Low',
                     IdentificationConfidence.medium => 'Medium',
                     IdentificationConfidence.high => 'High',
                   }),
-                  const Text(
-                    'Device identification is an estimate based on available evidence.',
-                  ),
+                  Text(device.confidenceExplanation),
                 ],
               ),
               InfoSection(
@@ -255,6 +248,16 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
                 title: 'Technical details',
                 children: [
                   InfoRow('Local device ID', device.id),
+                  if (device.hostname != null)
+                    InfoRow('Raw hostname', device.hostname!),
+                  if (device.reportedManufacturer != null)
+                    InfoRow(
+                      'Reported manufacturer',
+                      device.reportedManufacturer!,
+                    ),
+                  if (device.macVendor != null && !device.isPrivateMac)
+                    InfoRow('Raw MAC vendor', device.macVendor!),
+                  for (final note in device.identificationNotes) Text(note),
                   if (device.macSource != null)
                     InfoRow('MAC source', device.macSource!),
                   if (device.ssdpAdvertisements.isNotEmpty)

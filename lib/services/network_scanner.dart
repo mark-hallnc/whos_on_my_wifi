@@ -14,6 +14,7 @@ import 'ssdp_device_merger.dart';
 import 'neighbor_table_service.dart';
 import 'vendor_lookup_service.dart';
 import 'mac_device_enricher.dart';
+import 'device_identification_service.dart';
 
 typedef HostProbe = Future<List<String>> Function(String address);
 
@@ -350,6 +351,9 @@ class NetworkScanner implements NetworkDiscoveryService {
         if (cancellation.isCancelled) return cancelled();
         MacDeviceEnricher.merge(devices, neighbors, vendorLookup);
       }
+      devices.updateAll(
+        (_, device) => DeviceIdentificationService.identify(device),
+      );
       final result = snapshot(ScanState.completed);
       onProgress?.call(result);
       return result;
