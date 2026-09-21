@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../app/current_network_controller.dart';
 import '../models/scan_result.dart';
+import '../models/network_info.dart';
 import '../screens/network_information_screen.dart';
-import '../utils/device_presentation.dart';
 import '../utils/network_presentation.dart';
 
 class CurrentNetworkCard extends StatelessWidget {
@@ -72,12 +72,19 @@ class CurrentNetworkCard extends StatelessWidget {
               ),
               if (!network.isRefreshing) ...[
                 const SizedBox(height: 6),
-                Text(info.statusLabel),
-                const SizedBox(height: 6),
-                Text('Local IPv4  ${info.localIpAddress ?? 'Unavailable'}'),
-                if (info.subnet != null) Text('Subnet  ${info.subnet}'),
-                if (info.gatewayAddress != null)
-                  Text('Gateway  ${info.gatewayAddress}'),
+                if (info.localIpAddress != null)
+                  Text(
+                    [
+                      info.localIpAddress!,
+                      if (info.subnet != null) info.subnet!,
+                    ].join(' • '),
+                  ),
+                if (info.localIpAddress == null ||
+                    ![
+                      NetworkConnectionType.wifi,
+                      NetworkConnectionType.ethernet,
+                    ].contains(info.connectionType))
+                  Text(info.statusLabel),
                 if (info.notice != null) ...[
                   const SizedBox(height: 8),
                   Text(info.notice!),
@@ -98,41 +105,21 @@ class CurrentNetworkCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 32,
-                runSpacing: 12,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${result.onlineDevices}',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        result.isMock
-                            ? 'Example devices'
-                            : 'Online now / ${result.knownDevices} known',
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Last scan',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(formatTimestamp(result.completedAt)),
-                    ],
-                  ),
-                ],
+              Text(
+                '${result.onlineDevices} online • ${result.knownDevices} known',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              if (result.state != ScanState.idle) ...[
+              const SizedBox(height: 6),
+              Text(
+                result.completedAt == null
+                    ? 'Not scanned yet'
+                    : 'Last scan ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(result.completedAt!.toLocal()))}',
+              ),
+              if (result.state != ScanState.idle &&
+                  result.state != ScanState.completed) ...[
                 const SizedBox(height: 12),
                 Text(
                   result.message ??
@@ -157,6 +144,9 @@ class CurrentNetworkCard extends StatelessWidget {
                         : result.addressesChecked / result.totalCandidates,
                   ),
               ],
+              if (result.state == ScanState.completed &&
+                  result.possibleIsolation)
+                Text(result.message ?? ''),
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: scanBusy

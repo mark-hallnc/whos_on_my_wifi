@@ -86,7 +86,7 @@ void main() {
     (tester) async {
       await launch(tester);
       expect(find.text('Actual Wi-Fi'), findsOneWidget);
-      expect(find.text('Subnet  192.168.10.64/26'), findsOneWidget);
+      expect(find.textContaining('192.168.10.64/26'), findsOneWidget);
       expect(find.text('Home Wi-Fi'), findsNothing);
       expect(find.text('0 of 0 devices'), findsOneWidget);
       expect(requests, 0);
@@ -109,7 +109,7 @@ void main() {
       // Includes identity checks around the read-only enrichment stage.
       expect(reads, greaterThanOrEqualTo(5));
       expect(requests, 0);
-      expect(find.text('Scan completed'), findsOneWidget);
+      expect(find.text('Scan completed'), findsNothing);
     },
   );
 
@@ -132,7 +132,7 @@ void main() {
       expect(requests, 1);
       await tester.tap(find.text('Scan Network'));
       await tester.pumpAndSettle();
-      expect(find.text('Scan completed'), findsOneWidget);
+      expect(find.text('Scan completed'), findsNothing);
       expect(requests, 1);
     },
   );
@@ -223,10 +223,10 @@ void main() {
     expect(find.text('This device'), findsOneWidget);
     gate.complete(['TCP connection succeeded on port 80']);
     await tester.pumpAndSettle();
-    expect(find.text('Scan completed'), findsOneWidget);
+    expect(find.text('Scan completed'), findsNothing);
     expect(
       find.text('1 of 1 addresses checked; 2 devices found'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Unknown device'), findsOneWidget);
     expect(find.text('192.168.10.2'), findsOneWidget);
@@ -309,10 +309,10 @@ void main() {
       network['ipv4PrefixLength'] = 32;
       await tester.tap(find.text('Scan Network'));
       await tester.pumpAndSettle();
-      expect(find.text('Scan completed'), findsOneWidget);
+      expect(find.text('Scan completed'), findsNothing);
       expect(
         find.text('0 of 0 addresses checked; 1 devices found'),
-        findsOneWidget,
+        findsNothing,
       );
     },
   );

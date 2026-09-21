@@ -67,23 +67,33 @@ class DeviceCard extends StatelessWidget {
                               background: colors.tertiaryContainer,
                             ),
                           ),
-                        _StatusLabel(
-                          label: device.isOnline ? 'Online' : 'Offline',
-                          icon: device.isOnline
-                              ? Icons.check_circle_outline
-                              : Icons.schedule,
-                          foreground: device.isOnline
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
-                          background: device.isOnline
-                              ? colors.primaryContainer
-                              : colors.surfaceContainerHighest,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              device.isOnline
+                                  ? Icons.circle
+                                  : Icons.circle_outlined,
+                              size: 8,
+                              color: device.isOnline
+                                  ? colors.primary
+                                  : colors.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              device.isOnline ? 'Online' : 'Offline',
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(color: colors.onSurfaceVariant),
+                            ),
+                          ],
                         ),
-                        _StatusLabel(
-                          label: device.classification.label,
-                          foreground: colors.onSecondaryContainer,
-                          background: colors.secondaryContainer,
-                        ),
+                        if (device.classification !=
+                            DeviceClassification.unknown)
+                          _StatusLabel(
+                            label: device.classification.label,
+                            foreground: colors.onSecondaryContainer,
+                            background: colors.secondaryContainer,
+                          ),
                       ],
                     ),
                   ],
@@ -106,12 +116,10 @@ class _StatusLabel extends StatelessWidget {
     required this.label,
     required this.foreground,
     required this.background,
-    this.icon,
   });
   final String label;
   final Color foreground;
   final Color background;
-  final IconData? icon;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -123,10 +131,6 @@ class _StatusLabel extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (icon != null) ...[
-          Icon(icon, size: 14, color: foreground),
-          const SizedBox(width: 4),
-        ],
         Text(
           label,
           style: Theme.of(

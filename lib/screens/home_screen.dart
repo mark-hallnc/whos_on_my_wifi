@@ -106,7 +106,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
     final initial = _scanNetworkInfo;
-    if (!_scanBusy || initial == null || widget.network.isRefreshing) return;
+    if (!_scanBusy || initial == null || widget.network.isRefreshing) {
+      if (mounted && !_disposed && !_scanBusy) setState(() {});
+      return;
+    }
     final reason =
         NetworkScanner.networkChangeReason(initial, widget.network.info) ??
         (widget.network.permission.allowsAccess
@@ -332,7 +335,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final result = _liveResult ?? snapshot.data!;
+              final result = ScanHistoryOverlay.present(
+                _liveResult ?? snapshot.data!,
+                activeNetwork: widget.network.info,
+              );
               final devices = _visibleDevices(result);
               return CustomScrollView(
                 key: const PageStorageKey('devices-scroll'),

@@ -114,6 +114,12 @@ class DeviceIdentificationService {
     final hostnames = <String>[];
     final upnpVendor = IdentityText.manufacturer(upnp?.manufacturer);
     for (final s in services) {
+      if (s.type == 'nbns:node-status' || s.type == 'llmnr:ptr') {
+        if (IdentityText.name(s.hostname) != null) hostnames.add(s.hostname!);
+        serviceNames.add(
+          _name(s.hostname, s.type == 'nbns:node-status' ? 50 : 30),
+        );
+      }
       if (!s.type.startsWith('_')) {
         continue; // UPnP action names aren't device names.
       }
@@ -251,6 +257,34 @@ class DeviceIdentificationService {
       (s) => _is(s, '_airplay._tcp.') || _is(s, '_raop._tcp.'),
     );
     final workstation = services.any((s) => _is(s, '_workstation._tcp.'));
+    final nbnsComputer =
+        services.any(
+          (s) =>
+              s.type == 'nbns:node-status' &&
+              IdentityText.name(s.hostname) != null,
+        ) &&
+        (d.openPorts.any((p) => p == 445 || p == 139) ||
+            services.any(
+              (s) => _is(s, '_smb._tcp.') || _is(s, '_workstation._tcp.'),
+            ) ||
+            d.discoveryEvidence.any(
+              (e) => RegExp(
+                r'^TCP connection succeeded on port (445|139)$',
+              ).hasMatch(e),
+            ));
+    final wsTypes = services
+        .where((s) => s.type == 'ws-discovery')
+        .expand((s) => (s.attributes['types'] ?? '').split('\n'))
+        .toSet();
+    final wsPrinter = wsTypes.contains(
+      '{http://schemas.microsoft.com/windows/2006/08/wdp/print}PrintDeviceType',
+    );
+    final wsCamera = wsTypes.contains(
+      '{http://www.onvif.org/ver10/network/wsdl}NetworkVideoTransmitter',
+    );
+    if (nbnsComputer) hint(DeviceType.computer, 65);
+    if (wsPrinter) hint(DeviceType.printer, 80);
+    if (wsCamera) hint(DeviceType.camera, 80);
     hint(upnpHint, 90);
     if (printer) hint(DeviceType.printer, 80);
     if (workstation) hint(DeviceType.computer, 60);
@@ -280,8 +314,12 @@ class DeviceIdentificationService {
         ).hasMatch(model.value!)) {
       hint(DeviceType.camera, 90);
     }
-    if (model.quality >= 80 && model.value != null &&
-        RegExp(r'\bthermostat\b', caseSensitive: false).hasMatch(model.value!)) {
+    if (model.quality >= 80 &&
+        model.value != null &&
+        RegExp(
+          r'\bthermostat\b',
+          caseSensitive: false,
+        ).hasMatch(model.value!)) {
       hint(DeviceType.thermostat, 90);
     }
     for (final old in [d, ?previous]) {
@@ -300,7 +338,14 @@ class DeviceIdentificationService {
     }
 
     var confidence = IdentificationConfidence.low;
-    final meaningfulService = printer || cast || airplay || workstation;
+    final meaningfulService =
+        printer ||
+        cast ||
+        airplay ||
+        workstation ||
+        nbnsComputer ||
+        wsPrinter ||
+        wsCamera;
     final normalizedHost = IdentityText.name(hostname);
     if (upnpHint != DeviceType.unknown ||
         meaningfulService ||

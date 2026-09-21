@@ -48,6 +48,14 @@ class DeviceIdentityService {
       keys.add('udn:$udn');
     }
     for (final service in device.services) {
+      final endpoint = service.attributes['endpoint']?.trim().toLowerCase();
+      if (service.type == 'ws-discovery' &&
+          endpoint != null &&
+          RegExp(
+            r'^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          ).hasMatch(endpoint)) {
+        keys.add('wsd:$endpoint');
+      }
       final id = service.attributes['id']?.toLowerCase();
       if (service.type == '_googlecast._tcp.' &&
           id != null &&
@@ -55,12 +63,12 @@ class DeviceIdentityService {
         keys.add('cast:$id');
       }
     }
-    if(device.isCurrentDevice) keys.add('self');
+    if (device.isCurrentDevice) keys.add('self');
     return keys.toSet().toList();
   }
 
   static bool conflicts(NetworkDevice old, NetworkDevice fresh) {
-    for (final prefix in ['mac:', 'udn:', 'cast:']) {
+    for (final prefix in ['mac:', 'udn:', 'cast:', 'wsd:']) {
       final a = strongKeys(old).where((k) => k.startsWith(prefix)).toSet();
       final b = strongKeys(fresh).where((k) => k.startsWith(prefix)).toSet();
       if (a.isNotEmpty && b.isNotEmpty && a.intersection(b).isEmpty) {
@@ -72,7 +80,8 @@ class DeviceIdentityService {
         .toSet()
         .intersection(strongKeys(fresh).toSet())
         .isNotEmpty;
-    return !(old.isCurrentDevice && fresh.isCurrentDevice) && !sharedProtocol &&
+    return !(old.isCurrentDevice && fresh.isCurrentDevice) &&
+        !sharedProtocol &&
         old.macAddress != null &&
         fresh.macAddress != null &&
         old.macAddress != fresh.macAddress;

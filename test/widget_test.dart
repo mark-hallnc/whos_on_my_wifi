@@ -53,7 +53,7 @@ void main() {
     await tester.tap(find.byType(DeviceCard).first);
     await tester.pumpAndSettle();
     expect(find.text('Device Details'), findsOneWidget);
-    expect(find.text('Identity'), findsOneWidget);
+    expect(find.text('Identification'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'does not exist');

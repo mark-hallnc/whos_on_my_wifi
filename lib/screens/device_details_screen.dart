@@ -50,7 +50,7 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
         setState(
           () => device = widget.historical
               ? updated.withPresentation(online: false, isNew: false)
-              : updated,
+              : updated.withPresentation(online: device.isOnline),
         );
       }
     } catch (_) {
@@ -65,244 +65,193 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Device Details')),
-    body: SafeArea(
-      top: false,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              if (isMock) ...[
-                const MockDataBanner(),
-                const SizedBox(height: 24),
-              ],
-              Icon(
-                device.type.icon,
-                size: 56,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                device.displayName,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              if (device.isNew && !widget.historical)
-                const Text(
-                  'First discovered in the latest scan',
-                  textAlign: TextAlign.center,
+  Widget build(BuildContext context) {
+    String timestamp(DateTime value) {
+      final date = value.toLocal(), now = DateTime.now();
+      final local = MaterialLocalizations.of(context);
+      if (date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day) {
+        return 'Today, ${local.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+      }
+      return local.formatMediumDate(date);
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Device Details'),
+        actions: [
+          if (editable) TextButton(onPressed: edit, child: const Text('Edit')),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                if (isMock) ...[
+                  const MockDataBanner(),
+                  const SizedBox(height: 24),
+                ],
+                Icon(
+                  device.type.icon,
+                  size: 56,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-              Text(
-                '${device.isOnline ? 'Online' : 'Offline'} • ${device.classification.label}',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 28),
-              InfoSection(
-                title: 'Identity',
-                children: [
-                  InfoRow('Name', device.displayName),
-                  if (device.customName != null)
-                    InfoRow('Custom name', device.customName!),
-                  if (device.normalizedHostname != null)
-                    InfoRow('Hostname', device.normalizedHostname!),
-                  if (device.discoveredName != null &&
-                      device.discoveredName != device.displayName)
-                    InfoRow('Discovered name', device.discoveredName!),
-                  InfoRow('Classification', device.classification.label),
-                  if (editable)
-                    TextButton.icon(
-                      onPressed: edit,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit device'),
-                    ),
-                ],
-              ),
-              InfoSection(
-                title: 'Network information',
-                children: [
-                  InfoRow(
-                    isMock ? 'Network (example)' : 'Network',
-                    network.name ?? 'Unavailable',
-                  ),
-                  InfoRow('IP address', device.ipAddress),
-                  InfoRow('MAC address', device.macAddress ?? 'Unavailable'),
-                  if (device.macAddress != null)
-                    InfoRow(
-                      'MAC vendor',
-                      device.isPrivateMac
-                          ? 'Private/randomized address'
-                          : device.macVendor ?? 'Unknown',
-                    ),
-                  if (device.isPrivateMac)
-                    const Text(
-                      'Private/randomized MAC address. Manufacturer cannot be determined reliably from this address.',
-                    ),
-                  const Text(
-                    'MAC addresses may be unavailable on Android or randomized by devices.',
-                  ),
-                  InfoRow('Connection', device.isOnline ? 'Online' : 'Offline'),
-                  InfoRow(
-                    'Network isolation',
-                    switch (network.isolationStatus) {
-                      NetworkIsolationStatus.notChecked => 'Not checked',
-                      NetworkIsolationStatus.suspected => 'Suspected',
-                      NetworkIsolationStatus.notDetected => 'Not detected',
-                    },
-                  ),
-                ],
-              ),
-              InfoSection(
-                title: 'Device identification',
-                children: [
-                  InfoRow('Manufacturer', device.manufacturer ?? 'Unknown'),
-                  if (device.modelName != null)
-                    InfoRow('Model', device.modelName!),
-                  if (device.modelNumber != null)
-                    InfoRow('Model number', device.modelNumber!),
-                  if (device.modelDescription != null)
-                    InfoRow('Model description', device.modelDescription!),
-                  InfoRow('Device type', device.type.label),
-                  InfoRow('Confidence', switch (device.confidence) {
-                    IdentificationConfidence.low => 'Low',
-                    IdentificationConfidence.medium => 'Medium',
-                    IdentificationConfidence.high => 'High',
-                  }),
-                  Text(device.confidenceExplanation),
-                ],
-              ),
-              InfoSection(
-                title: 'Discovered services',
-                children: [
-                  if (device.services.isEmpty)
-                    const Text('No local services discovered.')
-                  else
-                    ...device.services.map(
-                      (service) => InfoRow(
-                        service.label,
-                        '${service.name}\n${service.type} • ${service.discoveryMethod}'
-                        '${service.port == null ? '' : ' • ${service.transport} ${service.port}'}',
-                      ),
-                    ),
-                ],
-              ),
-              InfoSection(
-                title: 'Ports',
-                children: [
+                const SizedBox(height: 12),
+                Text(
+                  device.displayName,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (device.classification != DeviceClassification.unknown)
                   Text(
-                    device.openPorts.isEmpty
-                        ? 'No port information recorded.'
-                        : 'Observed / advertised ports: ${device.openPorts.join(', ')}',
+                    device.classification.label,
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                if (device.isNew && !widget.historical)
                   const Text(
-                    'Advertised ports come from service announcements and are not additional TCP probes.',
+                    'First discovered in the latest scan',
+                    textAlign: TextAlign.center,
                   ),
-                ],
-              ),
-              InfoSection(
-                title: 'History',
-                children: [
-                  InfoRow(
-                    'Known on',
-                    network.name ?? network.subnet ?? 'Saved network',
+                const SizedBox(height: 20),
+                InfoSection(
+                  title: 'Identification',
+                  children: [
+                    if (device.manufacturer?.isNotEmpty ?? false)
+                      InfoRow('Manufacturer', device.manufacturer!),
+                    if (device.modelName?.isNotEmpty ?? false)
+                      InfoRow('Model', device.modelName!),
+                    if (device.normalizedHostname != null &&
+                        device.normalizedHostname != device.displayName)
+                      InfoRow('Hostname', device.normalizedHostname!),
+                    InfoRow('Type', device.type.label),
+                    InfoRow('Confidence', switch (device.confidence) {
+                      IdentificationConfidence.low => 'Low',
+                      IdentificationConfidence.medium => 'Medium',
+                      IdentificationConfidence.high => 'High',
+                    }),
+                  ],
+                ),
+                InfoSection(
+                  title: 'Network',
+                  children: [
+                    InfoRow('IP', device.ipAddress),
+                    if (device.macAddress != null)
+                      InfoRow('MAC', device.macAddress!),
+                    if (device.isPrivateMac)
+                      const InfoRow('MAC vendor', 'Private/randomized address'),
+                    InfoRow('Status', device.isOnline ? 'Online' : 'Offline'),
+                  ],
+                ),
+                if (device.services.isNotEmpty)
+                  InfoSection(
+                    title: 'Services',
+                    children: [
+                      for (final service in device.services)
+                        InfoRow(
+                          service.label,
+                          [
+                            if (service.name.isNotEmpty &&
+                                service.name != service.label)
+                              service.name,
+                            if (service.port != null) 'Port ${service.port}',
+                          ].join(' • '),
+                        ),
+                    ],
                   ),
-                  InfoRow('Current IP', device.ipAddress),
-                  InfoRow(
-                    'First seen${isMock ? ' (example)' : ''}',
-                    formatTimestamp(device.firstSeen),
+                if (device.openPorts.isNotEmpty)
+                  InfoSection(
+                    title: 'Ports',
+                    children: [Text(device.openPorts.join(', '))],
                   ),
-                  InfoRow(
-                    'Last seen${isMock ? ' (example)' : ''}',
-                    formatTimestamp(device.lastSeen),
-                  ),
-                  InfoRow(
-                    'Previous IP addresses',
-                    device.previousIpAddresses.isEmpty
-                        ? 'None recorded'
-                        : device.previousIpAddresses.join(', '),
-                  ),
-                ],
-              ),
-              InfoSection(
-                title: 'Notes',
-                children: [
-                  Text(
-                    device.notes.isEmpty
-                        ? 'No notes for this device.'
-                        : device.notes,
-                  ),
-                  const SizedBox(height: 8),
-                  if (editable)
-                    TextButton(
-                      onPressed: edit,
-                      child: const Text('Edit notes'),
-                    ),
-                ],
-              ),
-              InfoSection(
-                title: 'Technical details',
-                children: [
-                  InfoRow('Local device ID', device.id),
-                  if (device.hostname != null)
-                    InfoRow('Raw hostname', device.hostname!),
-                  if (device.reportedManufacturer != null)
+                InfoSection(
+                  title: 'History',
+                  children: [
                     InfoRow(
-                      'Reported manufacturer',
-                      device.reportedManufacturer!,
+                      'Network',
+                      network.name ?? network.subnet ?? 'Saved network',
                     ),
-                  if (device.macVendor != null && !device.isPrivateMac)
-                    InfoRow('Raw MAC vendor', device.macVendor!),
-                  for (final note in device.identificationNotes) Text(note),
-                  if (device.macSource != null)
-                    InfoRow('MAC source', device.macSource!),
-                  if (device.ssdpAdvertisements.isNotEmpty)
-                    ExpansionTile(
-                      title: const Text('Smart-device technical details'),
-                      children: [
-                        if (device.upnpDescription != null)
-                          for (final entry
-                              in device.upnpDescription!.fields.entries)
-                            InfoRow(entry.key, entry.value),
-                        for (final ad in device.ssdpAdvertisements)
-                          for (final entry in ad.headers.entries)
-                            InfoRow(entry.key.toUpperCase(), entry.value),
-                      ],
-                    ),
-                  for (final service in device.services)
-                    if (service.attributes.isNotEmpty ||
-                        service.addresses.isNotEmpty)
-                      ExpansionTile(
-                        title: Text('${service.label}: technical attributes'),
-                        children: [
-                          if (service.hostname != null)
-                            InfoRow('Hostname', service.hostname!),
-                          if (service.addresses.isNotEmpty)
-                            InfoRow('Addresses', service.addresses.join(', ')),
-                          for (final entry in service.attributes.entries)
-                            InfoRow(entry.key, entry.value),
-                        ],
+                    InfoRow('First seen', timestamp(device.firstSeen)),
+                    InfoRow('Last seen', timestamp(device.lastSeen)),
+                    if (device.previousIpAddresses.isNotEmpty)
+                      InfoRow(
+                        'Previous IPs',
+                        device.previousIpAddresses.join(', '),
                       ),
-                  InfoRow(
-                    'Data source',
-                    isMock ? 'Mock device repository' : 'Device repository',
+                  ],
+                ),
+                if (device.notes.trim().isNotEmpty)
+                  InfoSection(title: 'Notes', children: [Text(device.notes)])
+                else if (editable)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: edit,
+                      icon: const Icon(Icons.note_add_outlined),
+                      label: const Text('Add note'),
+                    ),
                   ),
-                  InfoRow(
-                    'Discovery evidence',
-                    device.discoveryEvidence.isEmpty
-                        ? 'Not recorded'
-                        : device.discoveryEvidence.join('; '),
-                  ),
-                ],
-              ),
-            ],
+                ExpansionTile(
+                  title: const Text('Technical details'),
+                  children: [
+                    InfoRow('Local device ID', device.id),
+                    if (device.hostname != null)
+                      InfoRow('Raw hostname', device.hostname!),
+                    if (device.discoveredName != null)
+                      InfoRow('Discovered name', device.discoveredName!),
+                    if (device.reportedManufacturer != null)
+                      InfoRow(
+                        'Reported manufacturer',
+                        device.reportedManufacturer!,
+                      ),
+                    if (device.modelNumber != null)
+                      InfoRow('Model number', device.modelNumber!),
+                    if (device.modelDescription != null)
+                      InfoRow('Model description', device.modelDescription!),
+                    if (device.macVendor != null && !device.isPrivateMac)
+                      InfoRow('Raw MAC vendor', device.macVendor!),
+                    if (device.macSource != null)
+                      InfoRow('MAC source', device.macSource!),
+                    if (device.isPrivateMac)
+                      const Text(
+                        'Private/randomized MAC address. Manufacturer cannot be determined reliably from this address.',
+                      ),
+                    for (final note in device.identificationNotes) Text(note),
+                    if (device.discoveryEvidence.isNotEmpty)
+                      InfoRow(
+                        'Discovery evidence',
+                        device.discoveryEvidence.join('\n'),
+                      ),
+                    if (device.upnpDescription != null)
+                      for (final entry
+                          in device.upnpDescription!.fields.entries)
+                        InfoRow(entry.key, entry.value),
+                    for (final ad in device.ssdpAdvertisements)
+                      for (final entry in ad.headers.entries)
+                        InfoRow(entry.key.toUpperCase(), entry.value),
+                    for (final service in device.services) ...[
+                      InfoRow('Service type', service.type),
+                      InfoRow('Discovery method', service.discoveryMethod),
+                      if (service.hostname != null)
+                        InfoRow('Hostname', service.hostname!),
+                      if (service.addresses.isNotEmpty)
+                        InfoRow('Addresses', service.addresses.join(', ')),
+                      for (final entry in service.attributes.entries)
+                        if (entry.value.isNotEmpty)
+                          InfoRow(entry.key, entry.value),
+                    ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

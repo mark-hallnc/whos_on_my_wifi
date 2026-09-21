@@ -23,7 +23,8 @@ class DiscoveredService {
   final Map<String, String> attributes;
 
   String get identity =>
-      '${type.toLowerCase()}|$host|$port|${name.toLowerCase()}';
+      '${type.toLowerCase()}|$host|$port|${name.toLowerCase()}'
+      '${type == 'ws-discovery' ? '|${attributes['endpoint'] ?? ''}' : ''}';
   String get label => switch (type
       .toLowerCase()
       .replaceFirst(RegExp(r'\.local\.?$'), '')
@@ -38,6 +39,9 @@ class DiscoveredService {
     '_smb._tcp' => 'File Sharing',
     '_workstation._tcp' => 'Workstation',
     '_device-info._tcp' => 'Device Information',
+    'nbns:node-status' => 'NetBIOS Name',
+    'llmnr:ptr' => 'Local Hostname',
+    'ws-discovery' => 'Web Services Discovery',
     _ => _upnpLabel,
   };
 

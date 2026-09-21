@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'tcp_host_probe.dart';
+import 'local_identity_discovery.dart';
 import '../models/network_device.dart';
 import '../models/network_info.dart';
 import '../models/scan_result.dart';
@@ -27,9 +28,13 @@ class NetworkScanner implements NetworkDiscoveryService {
     SsdpDiscovery? ssdpDiscovery,
     this.neighborTable = const NeighborTableService(),
     VendorLookupService? vendorLookup,
+    LocalIdentityDiscovery? identityDiscovery,
   }) : serviceDiscovery = serviceDiscovery ?? AndroidNsdDiscoveryService(),
        ssdpDiscovery = ssdpDiscovery ?? SsdpDiscoveryService(),
-       vendorLookup = vendorLookup ?? VendorLookupService.bundled;
+       vendorLookup = vendorLookup ?? VendorLookupService.bundled,
+       identityDiscovery = identityDiscovery ?? LocalIdentityDiscovery();
+
+  final LocalIdentityDiscovery identityDiscovery;
 
   static const concurrency = 48;
   static const maxCandidates = 1024;
@@ -119,6 +124,7 @@ class NetworkScanner implements NetworkDiscoveryService {
     var failed = false;
     var info = network ?? const NetworkInfo(id: 'unavailable');
     final devices = <String, NetworkDevice>{};
+    final wsHosts = <String>{};
     final tcpHosts = <String>{}, nsdHosts = <String>{}, ssdpHosts = <String>{};
     final durations = <String, Duration>{};
     var total = 0, checked = 0, skipped = 0;
@@ -148,14 +154,17 @@ class NetworkScanner implements NetworkDiscoveryService {
         nsdOnlyHosts: nsdHosts
             .difference(tcpHosts)
             .difference(ssdpHosts)
+            .difference(wsHosts)
             .length,
         ssdpOnlyHosts: ssdpHosts
             .difference(tcpHosts)
             .difference(nsdHosts)
+            .difference(wsHosts)
             .length,
         serviceOnlyHosts: {
           ...nsdHosts,
           ...ssdpHosts,
+          ...wsHosts,
         }.difference(tcpHosts).length,
         skippedProbes: skipped,
         devicesWithMac: devices.values
@@ -171,6 +180,11 @@ class NetworkScanner implements NetworkDiscoveryService {
         'TCP connection',
         if (servicesStarted) 'mDNS / Android NSD',
         if (ssdpStarted) 'SSDP / UPnP',
+        if (identityDiscovery.enabled && servicesStarted) ...[
+          'WS-Discovery',
+          'NBNS',
+          'LLMNR',
+        ],
       ],
       limitations: [
         ...serviceLimitations,
@@ -259,7 +273,7 @@ class NetworkScanner implements NetworkDiscoveryService {
     }
 
     bool knownLive(String ip) =>
-        nsdHosts.contains(ip) || ssdpHosts.contains(ip);
+        nsdHosts.contains(ip) || ssdpHosts.contains(ip) || wsHosts.contains(ip);
     void add(
       String ip,
       List<String> evidence, {
@@ -390,6 +404,21 @@ class NetworkScanner implements NetworkDiscoveryService {
       servicesStarted = true;
       ssdpStarted = true;
       await Future.wait([
+        measured('ws-discovery', () async {
+          serviceLimitations.addAll(
+            await identityDiscovery.discover(
+              network: info,
+              cancellation: work,
+              verifyNetwork: verify,
+              onDevice: (found) {
+                if (work.isCancelled) return;
+                IdentityObservation.merge(devices, found, info);
+                if (devices.containsKey(found.ip)) wsHosts.add(found.ip);
+                publish();
+              },
+            ),
+          );
+        }),
         measured('nsd', () async {
           serviceLimitations.addAll(
             await serviceDiscovery.discover(
@@ -460,6 +489,20 @@ class NetworkScanner implements NetworkDiscoveryService {
         'Identifying devices...',
       );
       await measured('identifying', () async {
+        serviceLimitations.addAll(
+          await identityDiscovery.enrich(
+            network: info,
+            devices: devices.values.toList(),
+            cancellation: work,
+            verifyNetwork: verify,
+            onDevice: (found) {
+              if (work.isCancelled) return;
+              IdentityObservation.merge(devices, found, info);
+              publish();
+            },
+          ),
+        );
+        if (work.isCancelled) return;
         final neighbors = await neighborTable.read(info, work);
         await verify(force: true);
         if (work.isCancelled) return;
@@ -488,7 +531,7 @@ class NetworkScanner implements NetworkDiscoveryService {
       final finalize = Stopwatch()..start();
       await verify(force: true);
       if (work.isCancelled) return cancelled();
-      final live = {...tcpHosts, ...nsdHosts, ...ssdpHosts};
+      final live = {...tcpHosts, ...nsdHosts, ...ssdpHosts, ...wsHosts};
       // A hypothesis only: require a responding gateway, a fully scanned LAN,
       // no external peers, and both service sources completing without warnings.
       possibleIsolation =
