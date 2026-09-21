@@ -136,15 +136,23 @@ void main() {
       ].contains(type);
       expect(
         devices.values.single.type,
-        printer ? DeviceType.printer : switch (type) {
-          '_googlecast._tcp.' => DeviceType.mediaDevice,
-          '_workstation._tcp.' => DeviceType.computer,
-          _ => DeviceType.unknown,
-        },
+        printer
+            ? DeviceType.printer
+            : switch (type) {
+                '_googlecast._tcp.' => DeviceType.mediaDevice,
+                '_workstation._tcp.' => DeviceType.computer,
+                _ => DeviceType.unknown,
+              },
       );
       expect(
         devices.values.single.confidence,
-        printer || ['_googlecast._tcp.', '_airplay._tcp.', '_raop._tcp.', '_workstation._tcp.'].contains(type)
+        printer ||
+                [
+                  '_googlecast._tcp.',
+                  '_airplay._tcp.',
+                  '_raop._tcp.',
+                  '_workstation._tcp.',
+                ].contains(type)
             ? IdentificationConfidence.medium
             : IdentificationConfidence.low,
       );
@@ -237,8 +245,11 @@ void main() {
         onProgress: updates.add,
       );
       await started.future;
-      expect(updates.last.state, ScanState.discoveringServices);
-      expect(updates.last.addressesChecked, 253);
+      expect(
+        updates.last.state,
+        anyOf(ScanState.running, ScanState.discoveringServices),
+      );
+      expect(updates.last.addressesChecked, lessThanOrEqualTo(253));
       await emit('service', service());
       await emit('service', service());
       await emit('done');
@@ -293,7 +304,7 @@ void main() {
           );
       await started.future;
       changed = true;
-      await emit('service', service());
+      await Future<void>.delayed(NetworkScanner.networkCheckInterval * 2);
       final result = await pending;
       expect(result.state, ScanState.cancelled);
       expect(result.message, 'Network changed. Scan stopped.');

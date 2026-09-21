@@ -88,8 +88,10 @@ class CurrentNetworkCard extends StatelessWidget {
                 child: TextButton(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) =>
-                          NetworkInformationScreen(network: network),
+                      builder: (_) => NetworkInformationScreen(
+                        network: network,
+                        scan: result,
+                      ),
                     ),
                   ),
                   child: const Text('Network details'),
@@ -104,7 +106,7 @@ class CurrentNetworkCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${result.devices.length}',
+                        '${result.onlineDevices}',
                         style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -113,7 +115,7 @@ class CurrentNetworkCard extends StatelessWidget {
                       Text(
                         result.isMock
                             ? 'Example devices'
-                            : 'Discovered devices',
+                            : 'Online now / ${result.knownDevices} known',
                       ),
                     ],
                   ),

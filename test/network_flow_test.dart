@@ -214,7 +214,7 @@ void main() {
     await tester.tap(find.text('Scan Network'));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Scanning network...'), findsOneWidget);
+    expect(find.text('Discovering devices...'), findsOneWidget);
     expect(
       find.text('0 of 1 addresses checked; 1 devices found'),
       findsOneWidget,

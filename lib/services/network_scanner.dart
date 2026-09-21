@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'tcp_host_probe.dart';
 import '../models/network_device.dart';
 import '../models/network_info.dart';
 import '../models/scan_result.dart';
@@ -30,10 +31,10 @@ class NetworkScanner implements NetworkDiscoveryService {
        ssdpDiscovery = ssdpDiscovery ?? SsdpDiscoveryService(),
        vendorLookup = vendorLookup ?? VendorLookupService.bundled;
 
-  static const concurrency = 40;
+  static const concurrency = 48;
   static const maxCandidates = 1024;
-  static const tcpTimeout = Duration(milliseconds: 250);
-  static const tcpPorts = [80, 443, 22, 445];
+  static const tcpTimeout = TcpHostProbe.primaryTimeout;
+  static const tcpPorts = TcpHostProbe.primaryPorts;
   final NetworkInfoService networkInfoService;
   final HostProbe? probe;
   final LocalServiceDiscovery serviceDiscovery;
@@ -61,33 +62,19 @@ class NetworkScanner implements NetworkDiscoveryService {
     return null;
   }
 
-  /// Sequential ports keep the socket count bounded by the worker count.
-  /// Only successful connections count; timeouts and OS errors do not.
+  static const progressInterval = Duration(milliseconds: 150);
+  static const networkCheckInterval = Duration(milliseconds: 400);
+  static const networkCheckTimeout = Duration(seconds: 2);
+  static int workersFor(int candidates) => candidates <= 256
+      ? 48
+      : candidates <= 512
+      ? 40
+      : 32;
+
   static Future<List<String>> probeTcp(
     String address, {
     ScanCancellation? cancellation,
-  }) async {
-    for (final port in tcpPorts) {
-      if (cancellation?.isCancelled ?? false) return [];
-      try {
-        final socket = await Socket.connect(
-          InternetAddress(address),
-          port,
-          timeout: tcpTimeout,
-        );
-        socket.destroy();
-        return ['TCP connection succeeded on port $port'];
-      } on SocketException catch (error) {
-        // Access denied is a scan failure, not an unresponsive host.
-        if (error.osError?.errorCode == 13 || error.osError?.errorCode == 1) {
-          rethrow;
-        }
-        // Closed, filtered and unreachable targets are not evidence.
-      }
-    }
-    return [];
-  }
-
+  }) => TcpHostProbe.probe(address, cancellation: cancellation);
   @override
   Future<ScanResult> discover({
     NetworkInfo? network,
@@ -126,22 +113,59 @@ class NetworkScanner implements NetworkDiscoveryService {
     void Function(ScanResult)? onProgress,
   }) async {
     final started = DateTime.now();
+    final clock = Stopwatch()..start();
+    final work = ScanCancellation();
+    final stopped = Completer<String?>();
+    var failed = false;
     var info = network ?? const NetworkInfo(id: 'unavailable');
     final devices = <String, NetworkDevice>{};
-    var total = 0;
-    var checked = 0;
+    final tcpHosts = <String>{}, nsdHosts = <String>{}, ssdpHosts = <String>{};
+    final durations = <String, Duration>{};
+    var total = 0, checked = 0, skipped = 0;
+    var phase = ScanPhase.preparing;
+    var state = ScanState.preparing;
+    String? message = 'Preparing scan...';
+    var possibleIsolation = false;
     final serviceLimitations = <String>[];
-    var servicesStarted = false;
-    var ssdpStarted = false;
-    ScanResult snapshot(ScanState state, [String? message]) => ScanResult(
+    var servicesStarted = false, ssdpStarted = false;
+    Timer? publication, monitor;
+    var lastPublication = Duration.zero;
+
+    ScanResult snapshot(ScanState status, [String? text]) => ScanResult(
       network: info,
       devices: devices.values.toList(),
       startedAt: started,
-      completedAt: state == ScanState.completed ? DateTime.now() : null,
-      state: state,
+      completedAt: status == ScanState.completed ? DateTime.now() : null,
+      state: status,
+      phase: phase,
       totalCandidates: total,
       addressesChecked: checked,
-      message: message,
+      message: text,
+      possibleIsolation: possibleIsolation,
+      diagnostics: ScanDiagnostics(
+        elapsed: clock.elapsed,
+        tcpHosts: tcpHosts.length,
+        nsdOnlyHosts: nsdHosts
+            .difference(tcpHosts)
+            .difference(ssdpHosts)
+            .length,
+        ssdpOnlyHosts: ssdpHosts
+            .difference(tcpHosts)
+            .difference(nsdHosts)
+            .length,
+        serviceOnlyHosts: {
+          ...nsdHosts,
+          ...ssdpHosts,
+        }.difference(tcpHosts).length,
+        skippedProbes: skipped,
+        devicesWithMac: devices.values
+            .where((d) => d.macAddress != null)
+            .length,
+        identifiedDevices: devices.values
+            .where((d) => d.confidence != IdentificationConfidence.low)
+            .length,
+        durations: durations,
+      ),
       discoveryMethods: [
         'Local network metadata',
         'TCP connection',
@@ -154,31 +178,88 @@ class NetworkScanner implements NetworkDiscoveryService {
         'The gateway is included from network metadata, not proof of a probe response.',
       ],
     );
-    void publishCancellation() =>
-        onProgress?.call(snapshot(ScanState.cancelled, cancellation.reason));
-    cancellation.addListener(publishCancellation);
-    ScanResult cancelled() =>
-        snapshot(ScanState.cancelled, cancellation.reason);
+    void emit() {
+      publication?.cancel();
+      publication = null;
+      lastPublication = clock.elapsed;
+      onProgress?.call(snapshot(state, message));
+    }
 
-    // Coalesce concurrent workers' OS reads. Checks happen before scheduling
-    // and before accepting evidence, so a changed network's reply is discarded.
+    void publish() {
+      if (work.isCancelled) return;
+      final delay = progressInterval - (clock.elapsed - lastPublication);
+      if (delay <= Duration.zero) {
+        emit();
+      } else {
+        publication ??= Timer(delay, () {
+          publication = null;
+          if (!work.isCancelled) emit();
+        });
+      }
+    }
+
+    void transition(ScanPhase next, ScanState status, String text) {
+      phase = next;
+      state = status;
+      message = text;
+      emit();
+    }
+
+    void cancelWork() => work.cancel(cancellation.reason);
+    void workStopped() {
+      if (!stopped.isCompleted) stopped.complete();
+      publication?.cancel();
+      publication = null;
+      if (!failed) {
+        cancellation.cancel(work.reason);
+        state = ScanState.cancelled;
+        message = work.reason;
+        emit();
+      }
+    }
+
+    work.addListener(workStopped);
+    cancellation.addListener(cancelWork);
+    if (cancellation.isCancelled) cancelWork();
+    ScanResult cancelled() => snapshot(ScanState.cancelled, work.reason);
+
     Future<void>? checking;
-    Future<void> verify() {
-      if (cancellation.isCancelled || verifyNetwork == null) {
+    Duration? lastCheck;
+    Future<void> verify({bool force = false}) {
+      if (work.isCancelled || verifyNetwork == null) return Future.value();
+      if (checking != null) return checking!;
+      if (!force &&
+          lastCheck != null &&
+          clock.elapsed - lastCheck! < networkCheckInterval) {
         return Future.value();
       }
-      return checking ??= () async {
+      return checking = () async {
+        final expired = Completer<String?>();
+        final deadline = Timer(
+          networkCheckTimeout,
+          () => expired.complete('Network access unavailable. Scan stopped.'),
+        );
         try {
-          final reason = await verifyNetwork(info);
-          if (reason != null) cancellation.cancel(reason);
+          // Platform reads cannot always be cancelled. Release scan workers on
+          // cancellation and ignore the late read rather than waiting for it.
+          final reason = await Future.any([
+            verifyNetwork(info),
+            stopped.future,
+            expired.future,
+          ]);
+          if (!work.isCancelled && reason != null) work.cancel(reason);
         } catch (_) {
-          cancellation.cancel('Network access unavailable. Scan stopped.');
+          work.cancel('Network access unavailable. Scan stopped.');
         } finally {
+          deadline.cancel();
+          lastCheck = clock.elapsed;
           checking = null;
         }
       }();
     }
 
+    bool knownLive(String ip) =>
+        nsdHosts.contains(ip) || ssdpHosts.contains(ip);
     void add(
       String ip,
       List<String> evidence, {
@@ -186,32 +267,62 @@ class NetworkScanner implements NetworkDiscoveryService {
       bool gateway = false,
     }) {
       final now = DateTime.now();
-      devices[ip] = NetworkDevice(
-        id: ip,
-        ipAddress: ip,
-        firstSeen: devices[ip]?.firstSeen ?? now,
-        lastSeen: now,
-        isOnline: true,
-        isCurrentDevice: local,
-        isGateway: gateway,
-        discoveryEvidence: evidence,
-      );
+      final old = devices[ip];
+      devices[ip] =
+          old?.withPresentation(
+            online: true,
+            lastSeen: now,
+            discoveryEvidence: {...old.discoveryEvidence, ...evidence}.toList(),
+          ) ??
+          NetworkDevice(
+            id: ip,
+            ipAddress: ip,
+            firstSeen: now,
+            lastSeen: now,
+            isOnline: true,
+            isCurrentDevice: local,
+            isGateway: gateway,
+            discoveryEvidence: evidence,
+          );
+    }
+
+    Future<void> guarded(Future<void> Function() task) async {
+      try {
+        await task();
+      } catch (error) {
+        if (error is SocketException &&
+            (error.osError?.errorCode == 1 || error.osError?.errorCode == 13)) {
+          work.cancel('Local network permission unavailable. Scan stopped.');
+        } else if (!work.isCancelled) {
+          failed = true;
+          work.cancel('Discovery stopped.');
+        }
+        rethrow;
+      }
+    }
+
+    Future<void> measured(String name, Future<void> Function() task) async {
+      final timer = Stopwatch()..start();
+      try {
+        await guarded(task);
+      } finally {
+        durations[name] = timer.elapsed;
+      }
     }
 
     try {
-      if (cancellation.isCancelled) return cancelled();
+      if (work.isCancelled) return cancelled();
       info = network ?? await networkInfoService.getCurrentNetwork();
-      if (cancellation.isCancelled) return cancelled();
+      if (work.isCancelled) return cancelled();
       if ((info.connectionType != NetworkConnectionType.wifi &&
               info.connectionType != NetworkConnectionType.ethernet) ||
           info.localIpAddress == null ||
           info.ipv4PrefixLength == null) {
-        final result = snapshot(
-          ScanState.failed,
-          'Connect to a Wi-Fi or Ethernet network with an IPv4 address to scan.',
-        );
-        onProgress?.call(result);
-        return result;
+        state = ScanState.failed;
+        message =
+            'Connect to a Wi-Fi or Ethernet network with an IPv4 address to scan.';
+        emit();
+        return snapshot(state, message);
       }
       final subnet = Ipv4Subnet(info.localIpAddress!, info.ipv4PrefixLength!);
       total = subnet.candidateCount;
@@ -228,151 +339,186 @@ class NetworkScanner implements NetworkDiscoveryService {
         add(gateway, ['Default gateway reported by Android'], gateway: true);
       }
       if (total > maxCandidates) {
-        final result = snapshot(
-          ScanState.subnetTooLarge,
-          'This subnet has $total candidate addresses. Automatic scanning is limited to $maxCandidates addresses.',
-        );
-        onProgress?.call(result);
-        return result;
+        state = ScanState.subnetTooLarge;
+        message =
+            'This subnet has $total candidate addresses. Automatic scanning is limited to $maxCandidates addresses.';
+        emit();
+        return snapshot(state, message);
       }
-      await verify();
-      if (cancellation.isCancelled) return cancelled();
-      onProgress?.call(snapshot(ScanState.running));
+      await verify(force: true);
+      if (work.isCancelled) return cancelled();
+      durations['preparing'] = clock.elapsed;
+      monitor = Timer.periodic(
+        networkCheckInterval,
+        (_) => unawaited(verify(force: true)),
+      );
+      transition(
+        ScanPhase.discoveringHosts,
+        ScanState.running,
+        'Discovering devices...',
+      );
       final candidates = subnet.candidates.iterator;
-      var failed = false;
       Future<void> worker() async {
-        try {
-          while (!failed && !cancellation.isCancelled) {
-            await verify();
-            if (failed || cancellation.isCancelled || !candidates.moveNext()) {
-              break;
-            }
-            final ip = candidates.current;
+        while (!work.isCancelled) {
+          await verify();
+          if (work.isCancelled || !candidates.moveNext()) break;
+          final ip = candidates.current;
+          if (knownLive(ip)) {
+            skipped++;
+          } else {
             final evidence = await (probe != null
                 ? probe!(ip)
-                : probeTcp(ip, cancellation: cancellation));
+                : TcpHostProbe.probe(
+                    ip,
+                    cancellation: work,
+                    knownLive: () => knownLive(ip),
+                  ));
             await verify();
-            if (failed || cancellation.isCancelled) break;
+            if (work.isCancelled) break;
             if (evidence.isNotEmpty) {
-              add(ip, [
-                ...?devices[ip]?.discoveryEvidence,
-                ...evidence,
-              ], gateway: ip == gateway);
+              tcpHosts.add(ip);
+              add(ip, evidence, gateway: ip == gateway);
             }
-            checked++;
-            onProgress?.call(snapshot(ScanState.running));
           }
-        } catch (error) {
-          if (error is SocketException &&
-              (error.osError?.errorCode == 13 ||
-                  error.osError?.errorCode == 1)) {
-            cancellation.cancel(
-              'Local network permission unavailable. Scan stopped.',
-            );
-          }
-          failed = true;
-          rethrow;
+          checked++;
+          publish();
         }
       }
 
-      // Wait for all active workers before publishing the terminal state.
-      await Future.wait(
-        List.generate(min(concurrency, total), (_) => worker()),
-      );
-      if (cancellation.isCancelled) return cancelled();
+      // Start service discovery before scheduling workers. All tasks share the
+      // same cancellation scope and are drained before releasing the scan lock.
       servicesStarted = true;
-      onProgress?.call(
-        snapshot(
-          ScanState.discoveringServices,
-          'Discovering local services...',
-        ),
-      );
-      serviceLimitations.addAll(
-        await serviceDiscovery.discover(
-          network: info,
-          cancellation: cancellation,
-          verifyNetwork: verify,
-          onService: (service) async {
-            if (cancellation.isCancelled) return;
-            ServiceDeviceMerger.merge(devices, service, info);
-            onProgress?.call(
-              snapshot(
-                ScanState.discoveringServices,
-                'Discovering local services...',
-              ),
-            );
-          },
-        ),
-      );
-      if (cancellation.isCancelled) return cancelled();
       ssdpStarted = true;
-      onProgress?.call(
-        snapshot(ScanState.discoveringServices, 'Looking for smart devices...'),
-      );
-      serviceLimitations.addAll(
-        await ssdpDiscovery.discover(
-          network: info,
-          cancellation: cancellation,
-          verifyNetwork: verify,
-          onDevice: (advertisement, description, location) {
-            if (cancellation.isCancelled) return;
-            SsdpDeviceMerger.merge(
-              devices,
-              advertisement,
-              info,
-              description: description,
-              location: location,
+      await Future.wait([
+        measured('nsd', () async {
+          serviceLimitations.addAll(
+            await serviceDiscovery.discover(
+              network: info,
+              cancellation: work,
+              verifyNetwork: verify,
+              onService: (service) async {
+                if (work.isCancelled) return;
+                ServiceDeviceMerger.merge(devices, service, info);
+                for (final ip in service.addresses) {
+                  if (devices[ip]?.services.any(
+                        (s) => s.discoveryMethod == 'mDNS / Android NSD',
+                      ) ??
+                      false) {
+                    nsdHosts.add(ip);
+                  }
+                }
+                publish();
+              },
+            ),
+          );
+        }),
+        measured('ssdp', () async {
+          serviceLimitations.addAll(
+            await ssdpDiscovery.discover(
+              network: info,
+              cancellation: work,
+              verifyNetwork: verify,
+              onDevice: (ad, description, location) {
+                if (work.isCancelled) return;
+                SsdpDeviceMerger.merge(
+                  devices,
+                  ad,
+                  info,
+                  description: description,
+                  location: location,
+                );
+                if (devices[ad.address]?.ssdpAdvertisements.isNotEmpty ??
+                    false) {
+                  ssdpHosts.add(ad.address);
+                }
+                publish();
+              },
+            ),
+          );
+        }),
+        measured('tcp', () async {
+          await Future.wait(
+            List.generate(
+              min(workersFor(total), total),
+              (_) => guarded(worker),
+            ),
+          );
+          if (!work.isCancelled) {
+            transition(
+              ScanPhase.discoveringServices,
+              ScanState.discoveringServices,
+              'Discovering network services...',
             );
-            onProgress?.call(
-              snapshot(
-                ScanState.discoveringServices,
-                'Looking for smart devices...',
-              ),
+          }
+        }),
+      ]);
+      await verify(force: true);
+      if (work.isCancelled) return cancelled();
+      transition(
+        ScanPhase.identifying,
+        ScanState.discoveringServices,
+        'Identifying devices...',
+      );
+      await measured('identifying', () async {
+        final neighbors = await neighborTable.read(info, work);
+        await verify(force: true);
+        if (work.isCancelled) return;
+        if (neighbors.isNotEmpty) {
+          try {
+            await vendorLookup.loadBundledDatabase();
+          } on Exception {
+            serviceLimitations.add(
+              'Bundled MAC vendor information unavailable.',
             );
-          },
-        ),
-      );
-      if (cancellation.isCancelled) return cancelled();
-      onProgress?.call(
-        snapshot(ScanState.discoveringServices, 'Identifying devices...'),
-      );
-      await verify();
-      if (cancellation.isCancelled) return cancelled();
-      final neighbors = await neighborTable.read(info, cancellation);
-      await verify();
-      if (cancellation.isCancelled) return cancelled();
-      if (neighbors.isNotEmpty) {
-        try {
-          await vendorLookup.loadBundledDatabase();
-        } on Exception {
-          serviceLimitations.add('Bundled MAC vendor information unavailable.');
+          }
+          await verify();
+          if (work.isCancelled) return;
+          MacDeviceEnricher.merge(devices, neighbors, vendorLookup);
         }
-        await verify();
-        if (cancellation.isCancelled) return cancelled();
-        MacDeviceEnricher.merge(devices, neighbors, vendorLookup);
-      }
-      devices.updateAll(
-        (_, device) => DeviceIdentificationService.identify(device),
-      );
-      final result = snapshot(ScanState.completed);
-      onProgress?.call(result);
-      return result;
-    } catch (error) {
-      if (error is SocketException &&
-          (error.osError?.errorCode == 13 || error.osError?.errorCode == 1)) {
-        cancellation.cancel(
-          'Local network permission unavailable. Scan stopped.',
+        devices.updateAll(
+          (_, device) => DeviceIdentificationService.identify(device),
         );
-      }
-      if (cancellation.isCancelled) return cancelled();
-      final result = snapshot(
-        ScanState.failed,
-        'Could not complete the scan. Check local network access and try again.',
+      });
+      if (work.isCancelled) return cancelled();
+      transition(
+        ScanPhase.finalizing,
+        ScanState.discoveringServices,
+        'Finalizing scan...',
       );
-      onProgress?.call(result);
-      return result;
+      final finalize = Stopwatch()..start();
+      await verify(force: true);
+      if (work.isCancelled) return cancelled();
+      final live = {...tcpHosts, ...nsdHosts, ...ssdpHosts};
+      // A hypothesis only: require a responding gateway, a fully scanned LAN,
+      // no external peers, and both service sources completing without warnings.
+      possibleIsolation =
+          total >= 16 &&
+          checked == total &&
+          gateway != null &&
+          live.contains(gateway) &&
+          live.every((ip) => ip == gateway || ip == info.localIpAddress) &&
+          serviceLimitations.isEmpty;
+      durations['finalizing'] = finalize.elapsed;
+      state = ScanState.completed;
+      message = possibleIsolation
+          ? 'Device-to-device communication may be restricted on this network.'
+          : null;
+      emit();
+      return snapshot(state, message);
+    } catch (_) {
+      if (!failed && work.isCancelled) return cancelled();
+      state = ScanState.failed;
+      message =
+          'Could not complete the scan. Check local network access and try again.';
+      emit();
+      return snapshot(state, message);
     } finally {
-      cancellation.removeListener(publishCancellation);
+      publication?.cancel();
+      monitor?.cancel();
+      cancellation.removeListener(cancelWork);
+      work.removeListener(workStopped);
+      await checking;
+      clock.stop();
     }
   }
 }

@@ -31,6 +31,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  final _visited = <int>{0};
   int _tapRevision = 0;
 
   @override
@@ -67,18 +68,27 @@ class _AppShellState extends State<AppShell> {
           scanner: widget.scanner,
           notifications: widget.notifications,
         ),
-        SavedNetworksScreen(repository: widget.repository),
-        SettingsScreen(
-          notifications: widget.notifications,
-          network: widget.network,
-          themeMode: widget.themeMode,
-          onThemeChanged: widget.onThemeChanged,
-        ),
+        if (_visited.contains(1))
+          SavedNetworksScreen(repository: widget.repository)
+        else
+          const SizedBox.shrink(),
+        if (_visited.contains(2))
+          SettingsScreen(
+            notifications: widget.notifications,
+            network: widget.network,
+            themeMode: widget.themeMode,
+            onThemeChanged: widget.onThemeChanged,
+          )
+        else
+          const SizedBox.shrink(),
       ],
     ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: _selectedIndex,
-      onDestinationSelected: (value) => setState(() => _selectedIndex = value),
+      onDestinationSelected: (value) => setState(() {
+        _visited.add(value);
+        _selectedIndex = value;
+      }),
       destinations: const [
         NavigationDestination(
           icon: Icon(Icons.radar_rounded),

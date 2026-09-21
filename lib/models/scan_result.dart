@@ -13,6 +13,35 @@ enum ScanState {
   subnetTooLarge,
 }
 
+enum ScanPhase {
+  preparing,
+  discoveringHosts,
+  discoveringServices,
+  identifying,
+  finalizing,
+}
+
+/// Session diagnostics, never used as device identity or persisted history.
+class ScanDiagnostics {
+  ScanDiagnostics({
+    required this.elapsed,
+    required this.tcpHosts,
+    required this.nsdOnlyHosts,
+    required this.ssdpOnlyHosts,
+    required this.serviceOnlyHosts,
+    required this.skippedProbes,
+    required this.devicesWithMac,
+    required this.identifiedDevices,
+    required Map<String, Duration> durations,
+  }) : durations = Map.unmodifiable(durations);
+  final Duration elapsed;
+  final int tcpHosts, nsdOnlyHosts, ssdpOnlyHosts, serviceOnlyHosts;
+  final int skippedProbes, devicesWithMac, identifiedDevices;
+
+  /// Independent tasks overlap; these durations must not be added together.
+  final Map<String, Duration> durations;
+}
+
 /// A snapshot; a null completion time means no scan has been completed.
 class ScanResult {
   ScanResult({
@@ -27,6 +56,9 @@ class ScanResult {
     this.message,
     this.foundCount,
     this.reconciliation,
+    this.phase = ScanPhase.preparing,
+    this.diagnostics,
+    this.possibleIsolation = false,
     List<String> discoveryMethods = const [],
     List<String> limitations = const [],
   }) : devices = List.unmodifiable(devices),
@@ -51,9 +83,17 @@ class ScanResult {
     discoveryMethods: discoveryMethods,
     limitations: limitations,
     foundCount: resetProgress ? null : foundCount,
+    phase: resetProgress ? ScanPhase.preparing : phase,
+    diagnostics: resetProgress ? null : diagnostics,
+    possibleIsolation: resetProgress ? false : possibleIsolation,
   );
 
   final NetworkInfo network;
+  final ScanPhase phase;
+  final ScanDiagnostics? diagnostics;
+  final bool possibleIsolation;
+  int get onlineDevices => devices.where((device) => device.isOnline).length;
+  int get knownDevices => devices.length;
   final ScanReconciliation? reconciliation;
   final ScanState state;
   final int totalCandidates;

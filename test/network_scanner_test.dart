@@ -130,7 +130,10 @@ void main() {
       expect(gateway.macAddress, isNull);
       expect(updates.first.state, ScanState.running);
       expect(updates.last.state, ScanState.completed);
-      expect(updates.where((r) => r.state == ScanState.running).length, 254);
+      expect(
+        updates.where((r) => r.state == ScanState.running).length,
+        lessThan(10),
+      );
       expect(updates.first.addressesChecked, 0);
     },
   );
@@ -205,7 +208,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(pending.length, NetworkScanner.concurrency);
       pending.first.complete(['TCP success']);
-      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(NetworkScanner.progressInterval * 2);
       expect(updates.last.devicesFound, 2);
       final checked = updates.last.addressesChecked;
       final scheduled = pending.length;
@@ -260,6 +263,7 @@ void main() {
         localIpAddress: '10.0.0.1',
         ipv4PrefixLength: 24,
       );
+      await Future<void>.delayed(NetworkScanner.networkCheckInterval * 2);
       for (final probe in probes.skip(1)) {
         probe.complete(['New network reply']);
       }

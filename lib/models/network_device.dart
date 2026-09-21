@@ -81,11 +81,13 @@ class NetworkDevice {
     bool? isNew,
     DateTime? firstSeen,
     List<String>? previousIpAddresses,
+    List<String>? discoveryEvidence,
+    DateTime? lastSeen,
   }) => NetworkDevice(
     id: id ?? this.id,
     ipAddress: ipAddress,
     firstSeen: firstSeen ?? this.firstSeen,
-    lastSeen: lastSeen,
+    lastSeen: lastSeen ?? this.lastSeen,
     customName: customName ?? this.customName,
     classification: classification ?? this.classification,
     notes: notes ?? this.notes,
@@ -109,7 +111,7 @@ class NetworkDevice {
     services: services,
     upnpDescription: upnpDescription,
     ssdpAdvertisements: ssdpAdvertisements,
-    discoveryEvidence: discoveryEvidence,
+    discoveryEvidence: discoveryEvidence ?? this.discoveryEvidence,
     openPorts: openPorts,
     previousIpAddresses: previousIpAddresses ?? this.previousIpAddresses,
   );

@@ -187,11 +187,14 @@ class SsdpDiscoveryService implements SsdpDiscovery {
         onDevice(ad, null, null);
         final location = policy.location(ad.headers['location'], ad.address);
         if (location == null ||
+            locations.containsKey(location) ||
             (!locations.containsKey(location) &&
                 locations.length >= maxLocations)) {
           return;
         }
-        final description = await (locations[location] ??= fetcher.fetch(
+        // Each advertisement is retained, but fetch/merge each description once.
+        // Duplicate service advertisements must not occupy all fetch workers.
+        final description = await (locations[location] = fetcher.fetch(
           location,
           ad.address,
           network,

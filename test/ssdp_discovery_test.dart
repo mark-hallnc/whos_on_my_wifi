@@ -220,7 +220,11 @@ void main() {
         final device = result.devices.singleWhere(
           (d) => d.ipAddress == address,
         );
-        expect(device.discoveryEvidence, contains('TCP response'));
+        // NSD runs first and proves this address live before a TCP worker reaches it.
+        expect(
+          device.discoveryEvidence,
+          contains('Discovered via mDNS / Android NSD'),
+        );
         expect(device.services.length, 2);
         expect(device.displayName, 'Living Room Roku');
         expect(

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import '../app/current_network_controller.dart';
 import '../models/network_info.dart';
+import '../models/scan_result.dart';
 import '../services/local_network_permission_service.dart';
 import '../utils/network_presentation.dart';
 import '../widgets/info_section.dart';
 import '../widgets/local_network_permission_flow.dart';
 
 class NetworkInformationScreen extends StatefulWidget {
-  const NetworkInformationScreen({super.key, required this.network});
+  const NetworkInformationScreen({super.key, required this.network, this.scan});
   final CurrentNetworkController network;
+  final ScanResult? scan;
   @override
   State<NetworkInformationScreen> createState() =>
       _NetworkInformationScreenState();
@@ -53,6 +55,48 @@ class _NetworkInformationScreenState extends State<NetworkInformationScreen> {
                 padding: const EdgeInsets.all(20),
                 children: [
                   if (controller.isRefreshing) const LinearProgressIndicator(),
+                  if (widget.scan?.diagnostics case final diagnostics?)
+                    ExpansionTile(
+                      title: const Text('Scan diagnostics'),
+                      children: [
+                        InfoRow(
+                          'Candidates / checked',
+                          '${widget.scan!.totalCandidates} / ${widget.scan!.addressesChecked}',
+                        ),
+                        InfoRow(
+                          'TCP responding hosts',
+                          '${diagnostics.tcpHosts}',
+                        ),
+                        InfoRow(
+                          'NSD only / SSDP only',
+                          '${diagnostics.nsdOnlyHosts} / ${diagnostics.ssdpOnlyHosts}',
+                        ),
+                        InfoRow(
+                          'Service-only hosts (including shared)',
+                          '${diagnostics.serviceOnlyHosts}',
+                        ),
+                        InfoRow(
+                          'Unnecessary probes skipped',
+                          '${diagnostics.skippedProbes}',
+                        ),
+                        InfoRow(
+                          'MAC / identified devices',
+                          '${diagnostics.devicesWithMac} / ${diagnostics.identifiedDevices}',
+                        ),
+                        InfoRow(
+                          'Total discovery time',
+                          '${diagnostics.elapsed.inMilliseconds} ms',
+                        ),
+                        for (final entry in diagnostics.durations.entries)
+                          InfoRow(
+                            entry.key,
+                            '${entry.value.inMilliseconds} ms',
+                          ),
+                        const Text(
+                          'Discovery methods run concurrently; durations overlap. Persistence time is not included.',
+                        ),
+                      ],
+                    ),
                   InfoSection(
                     title: 'Current connection',
                     children: [
